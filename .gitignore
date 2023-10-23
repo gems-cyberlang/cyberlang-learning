@@ -1,4 +1,6 @@
+ nltk-rm-stop-punc/movie_reviews/*
 # Byte-compiled / optimized / DLL files
+
 __pycache__/
 *.py[cod]
 *$py.class
