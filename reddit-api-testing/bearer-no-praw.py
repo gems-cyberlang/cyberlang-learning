@@ -59,5 +59,3 @@ bt_headers = {
         }
 
 bt_resp = requests.get(BEARER_TOEKN_URL, headers=bt_headers)
-
-print(bt_resp.json())
