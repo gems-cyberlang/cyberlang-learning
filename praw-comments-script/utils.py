@@ -21,7 +21,7 @@ def init_reddit() -> praw.Reddit:
 
 
 def search(
-    reddit_or_sr: praw.Reddit | praw.models.Subreddit,
+    subreddit: praw.models.Subreddit,
     query: str,
     *,
     sort: str = "relevance",
@@ -34,8 +34,7 @@ def search(
     """Search for some text
 
     ## Parameters
-    - `reddit_or_sr`: To search across all of Reddit, pass a `praw.Reddit` instance.
-        Otherwise, pass a `Subreddit` instance.
+    - `subreddit`: To search across all of Reddit, use r/all
     - `limit`: How many posts to get (maximum 100)
     - `params`: Arguments to pass directly to the API (e.g. "category")
     - `generator_kwargs`: Extra args to pass to the generator
@@ -53,17 +52,18 @@ def search(
     else:
         print(f"Invalid limit: {limit}")
 
-    if isinstance(reddit_or_sr, praw.Reddit):
-        # The specific subreddit chosen doesn't matter because /search searches all
-        # of Reddit anyway
-        subreddit = reddit_or_sr.subreddit("AskReddit")
-        params["restrict_sr"] = False
-    else:
-        subreddit = reddit_or_sr
-        params["restrict_sr"] = True
-
-    print("here!!!!!!!!!!!!!!!!")
-    print(params)
     return subreddit.search(
         query, sort=sort, syntax="lucene", time_filter="all", params=params, **generator_kwargs
     )
+
+COMMENT_COLS = ["name", "subreddit", "body"]
+
+def comment_relevant_fields(comment: praw.models.Comment):
+    """
+    Extract the relevant fields of a comment, to be saved in a CSV
+    """
+    return [
+        comment.name,
+        comment.subreddit_name_prefixed.removeprefix("r/"),
+        comment.body.replace("\n", " ").replace("\r", " "),
+    ]
