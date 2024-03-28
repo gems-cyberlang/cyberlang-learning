@@ -11,9 +11,9 @@ HEADERS = {
 
 
 class scraper_2000:
-    def __init__(self, subreddit: str, word: str, max: int = 100) -> None:
+    def __init__(self, subreddit: str, query: str, max: int = 100) -> None:
         self.subreddit = subreddit
-        self.word = word
+        self.query = query
         self.max = max
         self.max_retries = 5
         self.count = 0
@@ -51,7 +51,7 @@ class scraper_2000:
         raw_file = open("./out.json", "+w")
         time_file = open("./time.txt", "+w")
         # First get a starting point the most recent post
-        resp = self.subreddit_search(self.word, self.subreddit, limit=1)
+        resp = self.subreddit_search(self.query, self.subreddit, limit=1)
 
         if resp.status_code != 200:
             self.resp_err()
@@ -66,7 +66,7 @@ class scraper_2000:
 
         while self.count < self.max:
             resp = self.subreddit_search(
-                self.word, self.subreddit, after=curr_after, limit=100
+                self.query, self.subreddit, after=curr_after, limit=100
             )
             while resp.status_code != 200 and self.retries < self.max_retries:
                 if resp.status_code == 409:  # to many requests
@@ -74,7 +74,7 @@ class scraper_2000:
                     print("Waiting")
 
                 resp = self.subreddit_search(
-                    self.word, self.subreddit, after=curr_after, limit=100
+                    self.query, self.subreddit, after=curr_after, limit=100
                 )
 
                 self.retries += 1
