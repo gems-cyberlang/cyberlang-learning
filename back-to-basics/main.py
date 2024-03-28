@@ -2,6 +2,7 @@ import argparse
 import requests
 import json
 import time
+from typing import Optional
 
 BASE_URL = "https://www.reddit.com"
 
@@ -11,14 +12,16 @@ HEADERS = {
 
 
 class scraper_2000:
-    def __init__(self, subreddit: str, query: str, max: int = 100) -> None:
+    def __init__(
+        self, subreddit: str, query: str, max: int = 100, end: Optional[str] = None
+    ) -> None:
         self.subreddit = subreddit
         self.query = query
         self.max = max
+        self.end = end
         self.max_retries = 5
         self.count = 0
         self.retries = 0
-        self.file = open("./testFile", "+w")
 
     def subreddit_search(
         self,
@@ -48,28 +51,32 @@ class scraper_2000:
         exit()
 
     def run(self):
-        raw_file = open("./out.json", "+w")
-        time_file = open("./time.txt", "+w")
-        # First get a starting point the most recent post
-        resp = self.subreddit_search(self.query, self.subreddit, limit=1)
+        raw_file = open(f"./{self.subreddit}-out.json", "+w")
+        time_file = open(f"./{self.subreddit}-time.txt", "+w")
 
-        if resp.status_code != 200:
-            self.resp_err()
+        if self.end is not None:
+            curr_after = self.end
+        else:
+            # First get a starting point the most recent post
+            resp = self.subreddit_search(self.query, self.subreddit, limit=1)
 
-        json.dump(resp.json(), raw_file, indent=True)
-        item = resp.json()["data"]["children"][0]
+            if resp.status_code != 200:
+                self.resp_err()
 
-        print(time.ctime(item["data"]["created"]))
-        time_file.write(time.ctime(item["data"]["created"]) + "\n")
+            json.dump(resp.json(), raw_file, indent=True)
+            item = resp.json()["data"]["children"][0]
 
-        curr_after = item["data"]["name"]
+            print(time.ctime(item["data"]["created"]))
+            time_file.write(time.ctime(item["data"]["created"]) + "\n")
+
+            curr_after = item["data"]["name"]
 
         while self.count < self.max:
             resp = self.subreddit_search(
                 self.query, self.subreddit, after=curr_after, limit=100
             )
             while resp.status_code != 200 and self.retries < self.max_retries:
-                if resp.status_code == 409:  # to many requests
+                if resp.status_code == 409:  # too many requests
                     time.sleep(6000)
                     print("Waiting")
 
@@ -119,5 +126,5 @@ if __name__ == "__main__":
         default=None,
     )
     args = parser.parse_args()
-    scrapy = scraper_2000(args.subreddit, args.query, max=500)
+    scrapy = scraper_2000(args.subreddit, args.query, max=500, end=args.end)
     scrapy.run()
