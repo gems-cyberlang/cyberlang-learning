@@ -1,7 +1,7 @@
+import argparse
 import requests
 import json
 import time
-import os
 
 BASE_URL = "https://www.reddit.com"
 
@@ -87,8 +87,12 @@ class scraper_2000:
             curr_after = item['data']['name']
 
         raw_file.close()
-            
 
 if __name__ == "__main__":
-    scrapy = scraper_2000("unix", "unix", max=500)
+    parser = argparse.ArgumentParser(description='Process some integers.')
+    parser.add_argument('--subreddit', metavar='SUBREDDIT_NAME', help='Subreddit to get data from', default="unix")
+    parser.add_argument('--query', help='Search term', default="unix")
+    parser.add_argument('--end', metavar='ID', help='ID of the last post, to search from backwards', default=None)
+    args = parser.parse_args()
+    scrapy = scraper_2000(args.subreddit, args.query, max=500)
     scrapy.run()
