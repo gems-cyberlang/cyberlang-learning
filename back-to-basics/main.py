@@ -10,19 +10,57 @@ HEADERS = {
     "User-Agent": "cyberlang reaserach",
 }
 
+RATELIMIT_RESET = 0
+"""Seconds until the quota resets, so that we can query again"""
+
+
+def retry(fn):
+    def wrapper(self, *args, **kwargs):
+        resp = fn(self, *args, **kwargs)
+
+        while resp.status_code != 200 and self.retries < self.max_retries:
+            if resp.status_code == 409:  # too many requests
+                # TODO sleep based on ratelimit header
+                # time.sleep(6000)
+                print("Waiting")
+
+            resp = fn(self, *args, **kwargs)
+
+            self.retries += 1
+
+        if self.retries == self.max_retries:
+            json.dump(resp.json(), self.raw_file, indent=True)
+
+            for post in resp.json()["data"]["children"]:
+                print(time.ctime(post["data"]["created"]))
+                self.time_file.write(time.ctime(post["data"]["created"]) + "\n")
+
+            print("retries exceeded leaving")
+            exit()
+        else:
+            self.retries = 0
+
+        return resp
+
+    return wrapper
+
 
 class scraper_2000:
     def __init__(
-        self, subreddit: str, query: str, max: int = 100, end: Optional[str] = None
+        self, subreddit: str, query: str, max: int, max_retries: int, end: str = None
     ) -> None:
         self.subreddit = subreddit
         self.query = query
         self.max = max
         self.end = end
-        self.max_retries = 5
+        self.max_retries = max_retries
         self.count = 0
         self.retries = 0
 
+        self.raw_file = open(f"./{subreddit}-{query}-out.json", "+w")
+        self.time_file = open(f"./{subreddit}-{query}-time.txt", "+w")
+
+    @retry
     def subreddit_search(
         self,
         q: str,
@@ -51,9 +89,6 @@ class scraper_2000:
         exit()
 
     def run(self):
-        raw_file = open(f"./{self.subreddit}-out.json", "+w")
-        time_file = open(f"./{self.subreddit}-time.txt", "+w")
-
         if self.end is not None:
             curr_after = self.end
         else:
@@ -63,11 +98,11 @@ class scraper_2000:
             if resp.status_code != 200:
                 self.resp_err()
 
-            json.dump(resp.json(), raw_file, indent=True)
+            json.dump(resp.json(), self.raw_file, indent=True)
             item = resp.json()["data"]["children"][0]
 
             print(time.ctime(item["data"]["created"]))
-            time_file.write(time.ctime(item["data"]["created"]) + "\n")
+            self.time_file.write(time.ctime(item["data"]["created"]) + "\n")
 
             curr_after = item["data"]["name"]
 
@@ -75,56 +110,40 @@ class scraper_2000:
             resp = self.subreddit_search(
                 self.query, self.subreddit, after=curr_after, limit=100
             )
-            while resp.status_code != 200 and self.retries < self.max_retries:
-                if resp.status_code == 409:  # too many requests
-                    time.sleep(6000)
-                    print("Waiting")
 
-                resp = self.subreddit_search(
-                    self.query, self.subreddit, after=curr_after, limit=100
-                )
-
-                self.retries += 1
-
-            if self.retries == self.max_retries:
-                json.dump(resp.json(), raw_file, indent=True)
-
-                for post in resp.json()["data"]["children"]:
-                    print(time.ctime(post["data"]["created"]))
-                    time_file.write(time.ctime(post["data"]["created"]) + "\n")
-
-                print("reties exeded leaving")
-                exit()
-            else:
-                self.retries = 0
-
-            json.dump(resp.json(), raw_file, indent=True)
+            json.dump(resp.json(), self.raw_file, indent=True)
 
             for post in resp.json()["data"]["children"]:
                 print(time.ctime(post["data"]["created"]))
-                time_file.write(time.ctime(post["data"]["created"]) + "\n")
+                self.time_file.write(time.ctime(post["data"]["created"]) + "\n")
 
             item = resp.json()["data"]["children"][0]
             curr_after = item["data"]["name"]
 
-        raw_file.close()
+        self.raw_file.close()
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process some integers.")
     parser.add_argument(
         "--subreddit",
+        "-s",
         metavar="SUBREDDIT_NAME",
         help="Subreddit to get data from",
         default="unix",
     )
-    parser.add_argument("--query", help="Search term", default="unix")
+    parser.add_argument("--query", "-q", help="Search term", default="unix")
+    parser.add_argument("--max", "-m", help="Max ???", default=500, type=int)
+    parser.add_argument("--retries", "-r", help="Max retries", default=5, type=int)
     parser.add_argument(
         "--end",
+        "-e",
         metavar="ID",
         help="ID of the last post, to search from backwards",
         default=None,
     )
     args = parser.parse_args()
-    scrapy = scraper_2000(args.subreddit, args.query, max=500, end=args.end)
+    scrapy = scraper_2000(
+        args.subreddit, args.query, max=args.max, max_retries=args.retries, end=args.end
+    )
     scrapy.run()
