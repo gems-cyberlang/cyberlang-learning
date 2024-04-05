@@ -1,4 +1,4 @@
 # 1) embedding layer
 # 2) attention mask
-# 3) enoder layer
+# 3) encoder layer
 # 4) Bert
