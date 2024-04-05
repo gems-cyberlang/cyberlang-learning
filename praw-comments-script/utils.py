@@ -56,14 +56,15 @@ def search(
         query, sort=sort, syntax="lucene", time_filter="all", params=params, **generator_kwargs
     )
 
-COMMENT_COLS = ["name", "subreddit", "body"]
+COMMENT_COLS = ["name", "subreddit", "time", "body"]
 
 def comment_relevant_fields(comment: praw.models.Comment):
     """
     Extract the relevant fields of a comment, to be saved in a CSV
     """
     return [
-        comment.name,
+        comment.name.removeprefix("t1_"),
         comment.subreddit_name_prefixed.removeprefix("r/"),
+        int(comment.created_utc),
         comment.body.replace("\n", " ").replace("\r", " "),
     ]
