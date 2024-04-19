@@ -1,4 +1,5 @@
 # FAST BIRGAMSSSS ZOOOOOOOOOOOOOOOOOOOOOOOOOOM
+# got to install sklearn
 from sklearn.feature_extraction.text import CountVectorizer
 import pandas as pd
 
