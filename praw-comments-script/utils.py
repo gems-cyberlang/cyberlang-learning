@@ -2,6 +2,8 @@ from typing import Optional
 
 import configparser
 import praw
+import re
+import sys
 
 
 def init_reddit() -> praw.Reddit:
@@ -53,10 +55,22 @@ def search(
         print(f"Invalid limit: {limit}")
 
     return subreddit.search(
-        query, sort=sort, syntax="lucene", time_filter="all", params=params, **generator_kwargs
+        query,
+        sort=sort,
+        syntax="lucene",
+        time_filter="all",
+        params=params,
+        **generator_kwargs,
     )
 
+
+def multiline_to_csv(s: str) -> str:
+    """Make a multiline string appropriate for CSVs"""
+    return s.replace("\n", " ").replace("\r", " ")
+
+
 COMMENT_COLS = ["name", "subreddit", "time", "body"]
+
 
 def comment_relevant_fields(comment: praw.models.Comment):
     """
@@ -66,5 +80,29 @@ def comment_relevant_fields(comment: praw.models.Comment):
         comment.name.removeprefix("t1_"),
         comment.subreddit_name_prefixed.removeprefix("r/"),
         int(comment.created_utc),
-        comment.body.replace("\n", " ").replace("\r", " "),
+        multiline_to_csv(comment.body),
+    ]
+
+
+POST_COLS = ["id", "time", "subreddit", "author", "title", "body", "num_comments"]
+
+
+def post_relevant_fields(post: praw.models.Submission):
+    """
+    Extract the relevant fields of a post, to be saved in a CSV
+    """
+    sr_match = re.search("r/([^/]+)", post.permalink)
+    if sr_match is None:
+        sr_name = post.permalink
+        print(f"Could not extract subreddit for post {post.id}", file=sys.stderr)
+    else:
+        sr_name = post.permalink[sr_match.start(1) : sr_match.end(1)]
+    return [
+        post.id,
+        int(post.created_utc),
+        sr_name,
+        post.author.name,
+        post.title,
+        multiline_to_csv(post.selftext),
+        post.num_comments,
     ]
