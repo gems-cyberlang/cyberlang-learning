@@ -2,13 +2,12 @@ from dotenv import load_dotenv
 import numpy as np
 import os
 import csv
-import datetime
 import time
+import tqdm
 import logging
 import argparse
 import praw
 import json
-import random
 
 import praw.exceptions
 import praw.models
@@ -16,6 +15,7 @@ import praw.models
 USER_AGENT = "GEMSTONE CYBERLAND RESEARCH"
 ROWS = ["time", "comment_id", "body", "permalink", "score", "subreddit", "subreddit_id"]
 REQUEST_PER_CALL = 100
+SIZE_OF_ITERATION = 1000000
 
 get_formatted_time = lambda: time.strftime("%Y-%m-%d-%H-%M-%S")
 
@@ -55,12 +55,12 @@ class gems_runner:
 
         self.program_data_f = open(os.path.join(output_folder, "program_data.json"), mode)
         
-        if overwrite or not os.path.isfile(os.path.join(output_folder, "perm.gz")):
+        if overwrite or not os.path.isfile(os.path.join(output_folder, "perm.")):
             self.perm = None
         else:
-            self.perm = np.loadtxt(os.path.join(output_folder, "perm.gz"))
+            self.perm = np.loadtxt(os.path.join(output_folder, "perm.txt"))
 
-        if overwrite or not os.path.isfile(os.path.join(output_folder, "perm.gz")):
+        if overwrite or not os.path.isfile(os.path.join(output_folder, "perm.txt")):
             self.count = 0
         else:
             try:
@@ -125,15 +125,17 @@ class gems_runner:
         else:
             logger.setLevel(logging.INFO)
 
+        logging.disable()
         return logger
 
-    def run(self):
+    def run_sub_section(self, start, stop, max):
         """Runs the full system for the based on inisialized values.
         """        
+        sub_count = 0
         make_request_str_from_id = lambda id: f"t1_{np.base_repr(id, 36).lower()}"
         
-        if(None == self.perm): # if we dont have a permutation yet make it
-            self.perm = np.random.permutation(np.arange(start=self.start_comment, stop=(self.start_comment+10000000), dtype=np.uint64))
+        # if(None == self.perm): # if we dont have a permutation yet make it
+        self.perm = np.random.permutation(np.arange(start=start, stop=stop, dtype=np.uint64))
 
         pad = np.zeros([REQUEST_PER_CALL-self.perm.shape[0]%REQUEST_PER_CALL]) # Create array of zeros to pad
         self.perm = np.append(self.perm, pad)
@@ -161,14 +163,18 @@ class gems_runner:
                     ])
                     self.logger.debug(f"saved {submission.id}")
                     self.count += 1
-                    if self.count >= self.max_collect: break
-                else:
+                    if self.count >= self.max_collect or sub_count >= max: break
+                else: 
                     self.logger.debug(f"{submission.id} was not a comment it had type {type(submission)}")
 
             self.logger.debug(f"Completed group {i} of size {REQUEST_PER_CALL}")
-            if self.count >= self.max_collect: break
+            if self.count >= self.max_collect or sub_count >= max: break
 
         self.logger.debug(f"End of list reached or max number of hits gotten"); 
+
+    def run(self):
+        for i in tqdm.trange(self.start_comment, self.end_commnet, SIZE_OF_ITERATION):
+            self.run_sub_section(i, i+SIZE_OF_ITERATION, int(self.max_collect/(self.start_comment-self.end_commnet)))
 
     def close(self):
         """Closes all open files.
@@ -177,9 +183,9 @@ class gems_runner:
         program_data = {
             "count": self.count
         }
-        json.dump(self.program_data_f)
+        json.dump(program_data, self.program_data_f)
         self.program_data_f.close()
-        np.savetxt(os.path.join(self.output_dur, "perms.gz")) 
+        np.savetxt(os.path.join(self.output_dur, "perms.txt"), self.perm) 
         
 if(__name__ == "__main__"):
     # Arg parse

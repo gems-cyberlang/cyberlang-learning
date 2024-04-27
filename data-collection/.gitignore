@@ -4,3 +4,6 @@ lib
 lib64
 .env
 pyvenv.cfg
+
+output
+*.log
