@@ -3,6 +3,7 @@ import numpy as np
 import os
 import csv
 import datetime
+import time
 import logging
 import argparse
 import praw
@@ -16,7 +17,7 @@ USER_AGENT = "GEMSTONE CYBERLAND RESEARCH"
 ROWS = ["time", "comment_id", "body", "permalink", "score", "subreddit", "subreddit_id"]
 REQUEST_PER_CALL = 100
 
-get_formatted_time = lambda: datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+get_formatted_time = lambda: time.strftime("%Y-%m-%d-%H-%M-%S")
 
 class gems_runner:
     def __init__(self, 
@@ -33,6 +34,7 @@ class gems_runner:
         self.logger = self.init_logging("gems_runner", verbose)
         self.logger.info("Logging started")
 
+        self.output_dur = output_folder
         self.max_collect = max_collect
         self.start_comment = start_comment
         self.end_commnet = end_commnet
@@ -100,7 +102,7 @@ class gems_runner:
         logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
         # Set up logging file
-        log_file_name = f"run_{get_formatted_time}.log"
+        log_file_name = f"run_{get_formatted_time()}.log"
         file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         file_handler = logging.FileHandler("./" + log_file_name)
         file_handler.setLevel(logging.DEBUG)
@@ -113,8 +115,7 @@ class gems_runner:
         for logger_name in ("praw", "prawcore"):
             logger = logging.getLogger(logger_name)
             logger.setLevel(logging.DEBUG)
-            logger.addHandler(handler)
-            logger.addHandler(file_handler) # Also output to file
+            logger.addHandler(handler) # main handler also goes to file
 
         # Set up term logging and verbosity
         logger = logging.getLogger(logger_name)
@@ -127,21 +128,23 @@ class gems_runner:
         return logger
 
     def run(self):
+        """Runs the full system for the based on inisialized values.
+        """        
         make_request_str_from_id = lambda id: f"t1_{np.base_repr(id, 36).lower()}"
         
         if(None == self.perm): # if we dont have a permutation yet make it
-            self.perm = np.random.permutation(np.arange(start=self.start_comment, stop=self.end_commnet))
+            self.perm = np.random.permutation(np.arange(start=self.start_comment, stop=(self.start_comment+10000000), dtype=np.uint64))
 
         pad = np.zeros([REQUEST_PER_CALL-self.perm.shape[0]%REQUEST_PER_CALL]) # Create array of zeros to pad
         self.perm = np.append(self.perm, pad)
-        perm_by_request_call = np.reshape(self.perm, [REQUEST_PER_CALL, int(self.perm.shape[0]/REQUEST_PER_CALL)])
+        perm_by_request_call = np.reshape(self.perm, [int(self.perm.shape[0]/REQUEST_PER_CALL), REQUEST_PER_CALL])
        
         for i, id_request_goup in enumerate(perm_by_request_call):
             self.logger.debug(f"Attempting group {i} of size {REQUEST_PER_CALL}")
-            id_request_str_group = id_request_goup.apply_along_axis(make_request_str_from_id, 0, id_request_goup)
+            id_request_str_group = [make_request_str_from_id(int(id)) for id in id_request_goup]
             
             try:
-                ret = self.reddit.info(list(id_request_goup))
+                ret = self.reddit.info(list(id_request_str_group))
             except praw.exceptions.PRAWException as e:
                 self.logger.error(f"Praw error: {e}")
                 self.logger.error(f"Praw through a exeception in batch {i} of size {REQUEST_PER_CALL}")
@@ -151,7 +154,7 @@ class gems_runner:
                     self.main_csv.writerow([
                         submission.created_utc,
                         submission.id,
-                        submission.body,
+                        str(submission.body).replace("\n", ""),
                         submission.permalink,
                         submission.score,
                         submission.subreddit_id
@@ -168,11 +171,15 @@ class gems_runner:
         self.logger.debug(f"End of list reached or max number of hits gotten"); 
 
     def close(self):
+        """Closes all open files.
+        """        
         self.main_csv_f.close()
         program_data = {
-            "count": self.count,
+            "count": self.count
         }
-        np.savetxt() 
+        json.dump(self.program_data_f)
+        self.program_data_f.close()
+        np.savetxt(os.path.join(self.output_dur, "perms.gz")) 
         
 if(__name__ == "__main__"):
     # Arg parse
@@ -212,3 +219,4 @@ if(__name__ == "__main__"):
         args.log_file,)
 
     runner.run()
+    runner.close()
