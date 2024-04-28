@@ -26,6 +26,7 @@ class gems_runner:
         max_collect: int,
         start_comment: int,
         end_commnet: int,
+        step: int,
         client_id: str,
         reddit_secret: str,
         output_folder: str = "./output",
@@ -40,6 +41,7 @@ class gems_runner:
         self.max_collect = max_collect
         self.start_comment = start_comment
         self.end_commnet = end_commnet
+        self.step = step
         self.client_id = client_id
         self.reddit_secret = reddit_secret
 
@@ -167,7 +169,7 @@ class gems_runner:
             ]
 
             try:
-                ret = self.reddit.info(list(id_request_str_group))
+                ret = self.reddit.info(fullnames=list(id_request_str_group))
             except praw.exceptions.PRAWException as e:
                 self.logger.error(f"Praw error: {e}")
                 self.logger.error(
@@ -239,7 +241,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--log_file",
         type=str,
-        default=f"./log-{get_formatted_time}.log",
+        default=f"./log-{get_formatted_time()}.log",
         help="log file to use",
         required=False,
     )
