@@ -286,6 +286,7 @@ if __name__ == "__main__":
         args.max_collect,
         int(args.start_c, 36),
         int(args.end_c, 36),
+        0,
         client_id,
         reddit_secret,
         args.output_dir,
