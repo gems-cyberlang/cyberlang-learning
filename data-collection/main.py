@@ -189,7 +189,10 @@ class gems_runner:
                         [
                             submission.created_utc,
                             submission.id,
-                            str(submission.body).replace("\n", ""),
+                            str(submission.body)
+                            .replace("\r\n", " ")
+                            .replace("\r", " ")
+                            .replace("\n", " "),
                             submission.permalink,
                             submission.score,
                             submission.subreddit_id,
