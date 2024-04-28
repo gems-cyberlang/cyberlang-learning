@@ -8,6 +8,8 @@ import logging
 import argparse
 import praw
 import json
+from typing import Optional
+import sys
 
 import praw.exceptions
 import praw.models
@@ -16,6 +18,7 @@ USER_AGENT = "GEMSTONE CYBERLAND RESEARCH"
 ROWS = ["time", "comment_id", "body", "permalink", "score", "subreddit", "subreddit_id"]
 REQUEST_PER_CALL = 100
 SIZE_OF_ITERATION = 1000000
+LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
 get_formatted_time = lambda: time.strftime("%Y-%m-%d-%H-%M-%S")
 
@@ -29,12 +32,16 @@ class gems_runner:
         step: int,
         client_id: str,
         reddit_secret: str,
-        output_folder: str = "./output",
-        verbose: bool = False,
+        output_folder: str,
+        log_file: Optional[str],
+        log_level: int,
+        praw_log_level: int,
         overwrite: bool = False,
     ) -> None:
         # Start logging
-        self.logger = self.init_logging("gems_runner", verbose)
+        self.logger = self.init_logging(
+            "gems_runner", log_file, log_level, praw_log_level
+        )
         self.logger.info("Logging started")
 
         self.output_dur = output_folder
@@ -99,49 +106,49 @@ class gems_runner:
         logger.error("ERROR: " + err_msg)
         exit()
 
-    def init_logging(self, logger_name: str, verbose: bool) -> logging.Logger:
+    def init_logging(
+        self,
+        logger_name: str,
+        log_file: Optional[str],
+        log_level: int,
+        praw_log_level: int,
+    ) -> logging.Logger:
         """Initailize logging for whole system
 
         Args:
             logger_name (str): Will be printed in logs
             log_to_file (bool, optional): Whether to write to file default file 'log-%Y-%m-%d-%H-%M-%S.log" Defaults to True.
+            log_level: What log level to use for our own logs
+            praw_log_level: What log level to use for PRAW output to stderr
 
         Returns:
             logging.Logger: new logger
         """
+        # Set up logging file
+        log_file_name = (
+            f"./run_{get_formatted_time()}.log" if log_file is None else log_file
+        )
         # Global Log config
         logging.basicConfig(
-            level=logging.DEBUG,
-            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            level=logging.DEBUG, filename=log_file_name, format=LOG_FORMAT
         )
-
-        # Set up logging file
-        log_file_name = f"run_{get_formatted_time()}.log"
-        file_formatter = logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-        )
-        file_handler = logging.FileHandler("./" + log_file_name)
-        file_handler.setLevel(logging.DEBUG)
-        file_handler.setFormatter(file_formatter)
-        logging.getLogger().addHandler(file_handler)
 
         # Praw logging goes to stderr
-        handler = logging.StreamHandler()
-        handler.setLevel(logging.DEBUG)
-        for logger_name in ("praw", "prawcore"):
-            logger = logging.getLogger(logger_name)
+        praw_stderr_handler = logging.StreamHandler()
+        praw_stderr_handler.setFormatter(logging.Formatter(LOG_FORMAT))
+        praw_stderr_handler.setLevel(praw_log_level)
+        for other_logger_name in ("praw", "prawcore", "urllib3.connectionpool"):
+            logger = logging.getLogger(other_logger_name)
             logger.setLevel(logging.DEBUG)
-            logger.addHandler(handler)  # main handler also goes to file
+            logger.addHandler(praw_stderr_handler)  # main handler also goes to file
 
         # Set up term logging and verbosity
+        our_stderr_handler = logging.StreamHandler()
+        our_stderr_handler.setLevel(log_level)
         logger = logging.getLogger(logger_name)
+        logger.setLevel(logging.DEBUG)
+        logger.addHandler(our_stderr_handler)
 
-        if verbose:
-            logger.setLevel(logging.DEBUG)
-        else:
-            logger.setLevel(logging.INFO)
-
-        logging.disable()
         return logger
 
     def run_sub_section(self, start, stop, max):
@@ -241,7 +248,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--log_file",
         type=str,
-        default=f"./log-{get_formatted_time()}.log",
         help="log file to use",
         required=False,
     )
@@ -255,6 +261,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--verbose", "-v", action="store_true", help="will print all logging to screen"
     )
+    parser.add_argument("--silent", action="store_true", help="will log only errors")
     parser.add_argument(
         "--overwrite",
         "-o",
@@ -266,6 +273,13 @@ if __name__ == "__main__":
         "-r",
         action="store_true",
         help="if we should recover from a existing file",
+    )
+    parser.add_argument(
+        "--praw-log",
+        "-p",
+        help="Log level for PRAW output",
+        choices=["info", "debug", "warn", "error"],
+        default="warn",
     )
 
     args = parser.parse_args()
@@ -282,6 +296,26 @@ if __name__ == "__main__":
         print("Bad env")
         exit()
 
+    if args.verbose and args.silent:
+        print("Both --verbose and --silent were given", file=sys.stderr)
+        parser.print_help()
+        exit()
+    elif args.verbose:
+        log_level = logging.DEBUG
+    elif args.silent:
+        log_level = logging.ERROR
+    else:
+        log_level = logging.INFO
+
+    if args.praw_log == "info":
+        praw_log_level = logging.INFO
+    elif args.praw_log == "debug":
+        praw_log_level = logging.DEBUG
+    elif args.praw_log == "warn":
+        praw_log_level = logging.WARN
+    elif args.praw_log == "error":
+        praw_log_level = logging.ERROR
+
     runner = gems_runner(
         args.max_collect,
         int(args.start_c, 36),
@@ -289,8 +323,10 @@ if __name__ == "__main__":
         0,
         client_id,
         reddit_secret,
-        args.output_dir,
-        args.log_file,
+        output_folder=args.output_dir,
+        log_file=args.log_file,
+        log_level=log_level,
+        praw_log_level=praw_log_level,
     )
 
     runner.run()
