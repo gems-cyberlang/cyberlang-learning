@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-@author: A.Akdogan
+@author: A.Akdogan with modifications from Terra Oh
 """
 from gensim.models import Word2Vec
 import multiprocessing

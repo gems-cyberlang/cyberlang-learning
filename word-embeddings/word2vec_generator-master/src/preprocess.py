@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-@author: A.Akdogan
+@author: A.Akdogan with modifications from Terra Oh
 """
 
 import pandas as pd
 import re
 from nltk.corpus import stopwords
-
-
 
 
 def clean_process(df, target_column):
