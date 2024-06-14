@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 # taken from https://github.com/kavgan/nlp-in-practice/blob/master/word2vec/scripts/word2vec.py
 
 import gzip
