@@ -85,7 +85,7 @@ class gems_runner:
                 self.count = int(program_data.count)
             except:
                 self.logger.error("Loading json file failed check formating")
-                exit()
+                exit(1)
 
         # Start reddit
         self.reddit = praw.Reddit(
@@ -104,7 +104,7 @@ class gems_runner:
             logger (logging.Logger):
         """
         logger.error("ERROR: " + err_msg)
-        exit()
+        exit(1)
 
     def init_logging(
         self,
@@ -182,6 +182,7 @@ class gems_runner:
                 self.logger.error(
                     f"Praw through a exeception in batch {i} of size {REQUEST_PER_CALL}"
                 )
+                continue
 
             for submission in ret:
                 if type(submission) == praw.models.Comment:
@@ -227,7 +228,8 @@ class gems_runner:
         program_data = {"count": self.count}
         json.dump(program_data, self.program_data_f)
         self.program_data_f.close()
-        np.savetxt(os.path.join(self.output_dur, "perms.txt"), self.perm)
+        if self.perm is not None:
+            np.savetxt(os.path.join(self.output_dur, "perms.txt"), self.perm)
 
 
 if __name__ == "__main__":
@@ -290,19 +292,19 @@ if __name__ == "__main__":
     # Load env
     if not load_dotenv(args.env_file):
         print(f"You need a env file at {args.env_file}")
-        exit()
+        exit(1)
 
     reddit_secret = os.getenv("REDDIT_SECRET")
     client_id = os.getenv("REDDIT_ID")
 
     if reddit_secret == None or client_id == None:
         print("Bad env")
-        exit()
+        exit(1)
 
     if args.verbose and args.silent:
         print("Both --verbose and --silent were given", file=sys.stderr)
         parser.print_help()
-        exit()
+        exit(1)
     elif args.verbose:
         log_level = logging.DEBUG
     elif args.silent:
@@ -318,6 +320,8 @@ if __name__ == "__main__":
         praw_log_level = logging.WARN
     elif args.praw_log == "error":
         praw_log_level = logging.ERROR
+    else:
+        praw_log_level = logging.CRITICAL
 
     runner = gems_runner(
         args.max_collect,
