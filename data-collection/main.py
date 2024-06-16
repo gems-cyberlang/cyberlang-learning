@@ -23,15 +23,11 @@ LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
 get_formatted_time = lambda: time.strftime("%Y-%m-%d-%H-%M-%S")
 
-class permutaion:
-    def __init__(
-        self,
-        start: int,
-        stop: int,
-        overwrite: bool        
-        ) -> None:
 
-        
+class permutaion:
+    def __init__(self, start: int, stop: int, overwrite: bool) -> None:
+        pass
+
 
 class gems_runner:
     def __init__(
@@ -69,7 +65,7 @@ class gems_runner:
 
         mode = "w+" if overwrite else "a+"
 
-        write_rows = overwrite or not os.path.isfile( # Come back and fix this 
+        write_rows = overwrite or not os.path.isfile(  # Come back and fix this
             os.path.join(output_folder, "comments.csv")
         )
 
@@ -108,12 +104,14 @@ class gems_runner:
         self.logger.info("init complete")
 
         # file getters
-        self.get_perm_file_name = lambda start, stop: os.path.join(self.output_dur, f"perm-{str(start)}-{str(stop)}.perm")
-        self.get_pos_file_name = lambda start, stop: os.path.join(self.output_dur, f"pos-{str(start)}-{str(stop)}.perm")
+        self.get_perm_file_name = lambda start, stop: os.path.join(
+            self.output_dur, f"perm-{str(start)}-{str(stop)}.perm"
+        )
+        self.get_pos_file_name = lambda start, stop: os.path.join(
+            self.output_dur, f"pos-{str(start)}-{str(stop)}.perm"
+        )
 
-
-
-    def crit_err(self, err_msg: str, logger: logging.Logger):
+    def create_err(self, err_msg: str, logger: logging.Logger):
         """logs error and kills program
 
         Args:
@@ -168,18 +166,18 @@ class gems_runner:
 
         return logger
 
-    def get_perm(self, start:int, stop:int, max: int): 
-        """ Will get a permutaion if its exists if it dose not will open and save a new perm.
+    def get_perm(self, start: int, stop: int, max: int):
+        """Will get a permutaion if its exists if it dose not will open and save a new perm.
         Note perm revocery is only possible if the SIZE_OF_ITER and other constants are exactly
         the same as the prior run.
 
         Args:
             start (int): start index of perm
-            stop (int): end index of perm 
+            stop (int): end index of perm
             max (int): the max number of requests to get form the perm
 
         Returns:
-            (perm: np.array dtype=np.unint64, pos np.array dtype=np.uint64): the perm and pos 
+            (perm: np.array dtype=np.unint64, pos np.array dtype=np.uint64): the perm and pos
         """
         perm_file_name = self.get_perm_file_name(start, stop)
         pos_file_name = self.get_pos_file_name(start, stop)
@@ -188,7 +186,9 @@ class gems_runner:
         pos_file_exsits = os.path.isfile(pos_file_name)
 
         if self.overwrite or not perm_file_exsits or not pos_file_exsits:
-            perm = np.random.permutation(np.arange(start=start, stop=stop, dtype=np.uint64)) 
+            perm = np.random.permutation(
+                np.arange(start=start, stop=stop, dtype=np.uint64)
+            )
             pos = np.array([0], dtype=np.uint64)
 
             np.savetxt(perm_file_name, perm)
@@ -199,10 +199,9 @@ class gems_runner:
 
         return perm, pos, pos_file_name
 
-    def update_pos (self, pos:np.array) {
-        pos_file_name = slef.get_pos_file_name()
+    def update_pos(self, pos: npt.ArrayLike):
+        pos_file_name = self.get_pos_file_name()
         np.savetext(pos_file_name)
-    }
 
     def run_sub_section(self, start: int, stop: int, max: int):
         """Runs the full system for the based on inisialized values."""
