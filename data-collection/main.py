@@ -349,7 +349,7 @@ if __name__ == "__main__":
     reddit_secret = os.getenv("REDDIT_SECRET")
     client_id = os.getenv("REDDIT_ID")
 
-    if reddit_secret == None or client_id == None:
+    if reddit_secret is None or client_id is None:
         print("Bad env")
         exit(1)
 
