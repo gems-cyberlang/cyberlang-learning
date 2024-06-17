@@ -34,7 +34,7 @@ class gems_runner:
         self,
         max_collect: int,
         start_comment: int,
-        end_commnet: int,
+        end_comment: int,
         client_id: str,
         reddit_secret: str,
         output_folder: str,
@@ -52,7 +52,7 @@ class gems_runner:
         self.output_dur = output_folder
         self.max_collect = max_collect
         self.start_comment = start_comment
-        self.end_commnet = end_commnet
+        self.end_comment = end_comment
         self.client_id = client_id
         self.reddit_secret = reddit_secret
         self.overwrite = overwrite
@@ -265,11 +265,11 @@ class gems_runner:
         self.logger.debug(f"End of list reached or max number of hits gotten")
 
     def run(self):
-        for i in tqdm.trange(self.start_comment, self.end_commnet, SIZE_OF_ITERATION):
+        for i in tqdm.trange(self.start_comment, self.end_comment, SIZE_OF_ITERATION):
             self.run_sub_section(
                 i,
                 i + SIZE_OF_ITERATION,
-                int(self.max_collect / (self.start_comment - self.end_commnet)),
+                int(self.max_collect / (self.start_comment - self.end_comment)),
             )
 
     def close(self):
