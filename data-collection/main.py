@@ -35,7 +35,6 @@ class gems_runner:
         max_collect: int,
         start_comment: int,
         end_commnet: int,
-        step: int,
         client_id: str,
         reddit_secret: str,
         output_folder: str,
@@ -54,7 +53,6 @@ class gems_runner:
         self.max_collect = max_collect
         self.start_comment = start_comment
         self.end_commnet = end_commnet
-        self.step = step
         self.client_id = client_id
         self.reddit_secret = reddit_secret
         self.overwrite = overwrite
@@ -296,20 +294,20 @@ if __name__ == "__main__":
     parser.add_argument("start_c", type=str, help="The comment ID to start at")
     parser.add_argument("end_c", type=str, help="The comment ID to end at")
     parser.add_argument(
-        "--output_dir",
+        "--output-dir",
         type=str,
         default="./output",
         help="ouput directory",
         required=False,
     )
     parser.add_argument(
-        "--log_file",
+        "--log-file",
         type=str,
         help="log file to use",
         required=False,
     )
     parser.add_argument(
-        "--env_file",
+        "--env-file",
         type=str,
         default=f"./.env",
         help="the env file to use",
@@ -379,7 +377,6 @@ if __name__ == "__main__":
         args.max_collect,
         int(args.start_c, 36),
         int(args.end_c, 36),
-        0,
         client_id,
         reddit_secret,
         output_folder=args.output_dir,
