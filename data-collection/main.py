@@ -40,15 +40,17 @@ class gems_runner:
         client_id: str,
         reddit_secret: str,
         output_dir: str,
-        log_file: Optional[str],
+        log_file: str,
         log_level: int,
         praw_log_level: int,
         overwrite: bool = False,
     ) -> None:
-        os.mkdir(output_dir)
+        # Open files and directores loading data from there
+        if not os.path.isdir(output_dir):
+            os.mkdir(output_dir)  # make output directory if it dose not exits
 
         # Start logging
-        self.logger = self.init_logging(
+        self.logger = self._init_logging(
             "gems_runner", log_file, log_level, praw_log_level
         )
         self.logger.info("Logging started")
@@ -60,10 +62,6 @@ class gems_runner:
         self.client_id = client_id
         self.reddit_secret = reddit_secret
         self.overwrite = overwrite
-
-        # Open files and directores loading data from there
-        if not os.path.isdir(output_dir):
-            os.mkdir(output_dir)  # make output directory if it dose not exits
 
         mode = "w+" if overwrite else "a+"
 
@@ -121,7 +119,7 @@ class gems_runner:
         logger.error("ERROR: " + err_msg)
         exit(1)
 
-    def init_logging(
+    def _init_logging(
         self,
         logger_name: str,
         log_file: str,
