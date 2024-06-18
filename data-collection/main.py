@@ -21,7 +21,9 @@ REQUEST_PER_CALL = 100
 SIZE_OF_ITERATION = 1000000
 LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
-get_formatted_time = lambda: time.strftime("%Y-%m-%d-%H-%M-%S")
+
+def get_formatted_time():
+    return time.strftime("%Y-%m-%d-%H-%M-%S")
 
 
 class permutaion:
@@ -37,19 +39,21 @@ class gems_runner:
         end_comment: int,
         client_id: str,
         reddit_secret: str,
-        output_folder: str,
+        output_dir: str,
         log_file: Optional[str],
         log_level: int,
         praw_log_level: int,
         overwrite: bool = False,
     ) -> None:
+        os.mkdir(output_dir)
+
         # Start logging
         self.logger = self.init_logging(
             "gems_runner", log_file, log_level, praw_log_level
         )
         self.logger.info("Logging started")
 
-        self.output_dur = output_folder
+        self.output_dir = output_dir
         self.max_collect = max_collect
         self.start_comment = start_comment
         self.end_comment = end_comment
@@ -58,31 +62,29 @@ class gems_runner:
         self.overwrite = overwrite
 
         # Open files and directores loading data from there
-        if not os.path.isdir(output_folder):
-            os.mkdir(output_folder)  # make output directory if it dose not exits
+        if not os.path.isdir(output_dir):
+            os.mkdir(output_dir)  # make output directory if it dose not exits
 
         mode = "w+" if overwrite else "a+"
 
         write_rows = overwrite or not os.path.isfile(  # Come back and fix this
-            os.path.join(output_folder, "comments.csv")
+            os.path.join(output_dir, "comments.csv")
         )
 
-        self.main_csv_f = open(os.path.join(output_folder, "comments.csv"), mode)
+        self.main_csv_f = open(os.path.join(output_dir, "comments.csv"), mode)
         self.main_csv = csv.writer(self.main_csv_f)
 
         if write_rows:
             self.main_csv.writerow(ROWS)
 
-        self.program_data_f = open(
-            os.path.join(output_folder, "program_data.json"), mode
-        )
+        self.program_data_f = open(os.path.join(output_dir, "program_data.json"), mode)
 
-        if overwrite or not os.path.isfile(os.path.join(output_folder, "perm.")):
+        if overwrite or not os.path.isfile(os.path.join(output_dir, "perm.")):
             self.perm = None
         else:
-            self.perm = np.loadtxt(os.path.join(output_folder, "perm.txt"))
+            self.perm = np.loadtxt(os.path.join(output_dir, "perm.txt"))
 
-        if overwrite or not os.path.isfile(os.path.join(output_folder, "perm.txt")):
+        if overwrite or not os.path.isfile(os.path.join(output_dir, "perm.txt")):
             self.count = 0
         else:
             try:
@@ -103,10 +105,10 @@ class gems_runner:
 
         # file getters
         self.get_perm_file_name = lambda start, stop: os.path.join(
-            self.output_dur, f"perm-{str(start)}-{str(stop)}.perm"
+            self.output_dir, f"perm-{str(start)}-{str(stop)}.perm"
         )
         self.get_pos_file_name = lambda start, stop: os.path.join(
-            self.output_dur, f"pos-{str(start)}-{str(stop)}.perm"
+            self.output_dir, f"pos-{str(start)}-{str(stop)}.perm"
         )
 
     def create_err(self, err_msg: str, logger: logging.Logger):
@@ -122,7 +124,7 @@ class gems_runner:
     def init_logging(
         self,
         logger_name: str,
-        log_file: Optional[str],
+        log_file: str,
         log_level: int,
         praw_log_level: int,
     ) -> logging.Logger:
@@ -130,7 +132,7 @@ class gems_runner:
 
         Args:
             logger_name (str): Will be printed in logs
-            log_to_file (bool, optional): Whether to write to file default file 'log-%Y-%m-%d-%H-%M-%S.log" Defaults to True.
+            log_file: Name of file to log to
             log_level: What log level to use for our own logs
             praw_log_level: What log level to use for PRAW output to stderr
 
@@ -138,13 +140,8 @@ class gems_runner:
             logging.Logger: new logger
         """
         # Set up logging file
-        log_file_name = (
-            f"./run_{get_formatted_time()}.log" if log_file is None else log_file
-        )
         # Global Log config
-        logging.basicConfig(
-            level=logging.DEBUG, filename=log_file_name, format=LOG_FORMAT
-        )
+        logging.basicConfig(level=logging.DEBUG, filename=log_file, format=LOG_FORMAT)
 
         # Praw logging goes to stderr
         praw_stderr_handler = logging.StreamHandler()
@@ -279,10 +276,12 @@ class gems_runner:
         json.dump(program_data, self.program_data_f)
         self.program_data_f.close()
         if self.perm is not None:
-            np.savetxt(os.path.join(self.output_dur, "perms.txt"), self.perm)
+            np.savetxt(os.path.join(self.output_dir, "perms.txt"), self.perm)
 
 
 if __name__ == "__main__":
+    curr_dir = os.path.dirname(__file__)
+
     # Arg parse
     parser = argparse.ArgumentParser(
         description="The Gems Reddit Data collector 9000 turdo"
@@ -291,12 +290,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "max_collect", type=int, help="The max number of comments to collect"
     )
-    parser.add_argument("start_c", type=str, help="The comment ID to start at")
-    parser.add_argument("end_c", type=str, help="The comment ID to end at")
+    parser.add_argument(
+        "start_id", type=str, help="The comment ID to start at (base 36)"
+    )
+    parser.add_argument("end_id", type=str, help="The comment ID to end at (base 36)")
     parser.add_argument(
         "--output-dir",
         type=str,
-        default="./output",
         help="ouput directory",
         required=False,
     )
@@ -309,7 +309,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--env-file",
         type=str,
-        default=f"./.env",
+        default=os.path.join(curr_dir, ".env"),
         help="the env file to use",
         required=False,
     )
@@ -373,14 +373,27 @@ if __name__ == "__main__":
     else:
         praw_log_level = logging.CRITICAL
 
+    start = int(args.start_id, 36)
+    end = int(args.end_id, 36)
+
+    if args.output_dir is None:
+        output_dir = os.path.join(curr_dir, f"out_{args.start_id}-{args.end_id}")
+    else:
+        output_dir = args.output_dir
+
+    if args.log_file is None:
+        log_file = os.path.join(output_dir, f"run_{get_formatted_time()}.log")
+    else:
+        log_file = args.log_file
+
     runner = gems_runner(
         args.max_collect,
-        int(args.start_c, 36),
-        int(args.end_c, 36),
+        start,
+        end,
         client_id,
         reddit_secret,
-        output_folder=args.output_dir,
-        log_file=args.log_file,
+        output_dir=output_dir,
+        log_file=log_file,
         log_level=log_level,
         praw_log_level=praw_log_level,
     )

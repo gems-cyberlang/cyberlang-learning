@@ -6,4 +6,5 @@ lib64
 pyvenv.cfg
 
 output/
+out_*-*/
 *.log
