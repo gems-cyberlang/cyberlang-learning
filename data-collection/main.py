@@ -233,7 +233,7 @@ class gems_runner:
                 if type(submission) == praw.models.Comment:
                     self.main_csv.writerow(
                         [
-                            submission.created_utc,
+                            int(submission.created_utc),
                             submission.id,
                             str(submission.body)
                             .replace("\r\n", " ")
