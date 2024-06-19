@@ -2,6 +2,7 @@ from dotenv import load_dotenv
 import numpy as np
 import os
 import csv
+import gzip
 import time
 import tqdm
 import logging
@@ -81,6 +82,9 @@ class gems_runner:
             self.main_csv.writerow(ROWS)
 
         self.program_data_f = open(os.path.join(output_dir, "program_data.json"), mode)
+
+        self.missed_comments = gzip.open(os.path.join(output_dir, "missed-comments.txt.gz"), "at")
+        """IDs of comments that Reddit didn't return any info for"""
 
         if overwrite or not os.path.isfile(os.path.join(output_dir, "perm.")):
             self.perm = None
@@ -218,10 +222,10 @@ class gems_runner:
 
         for i, id_request_goup in enumerate(perm_by_request_call):
             self.logger.debug(f"Attempting group {i} of size {REQUEST_PER_CALL}")
-            id_request_str_group = [f"t1_{to_b36(int(id))}" for id in id_request_goup]
+            ids = [to_b36(int(id)) for id in id_request_goup]
 
             try:
-                ret = self.reddit.info(fullnames=list(id_request_str_group))
+                ret = self.reddit.info(fullnames=[f"t1_{id}" for id in ids])
             except praw.exceptions.PRAWException as e:
                 self.logger.error(f"Praw error: {e}")
                 self.logger.error(
@@ -229,8 +233,10 @@ class gems_runner:
                 )
                 continue
 
+            misses = set(ids)
             for submission in ret:
                 if type(submission) == praw.models.Comment:
+                    misses.remove(submission.id)
                     self.main_csv.writerow(
                         [
                             int(submission.created_utc),
@@ -249,9 +255,12 @@ class gems_runner:
                     if self.count >= self.max_collect or sub_count >= max:
                         break
                 else:
-                    self.logger.debug(
+                    self.logger.error(
                         f"{submission.id} was not a comment it had type {type(submission)}"
                     )
+
+            for id in misses:
+                self.missed_comments.write(f"{id}\n")
 
             self.logger.debug(f"Completed group {i} of size {REQUEST_PER_CALL}")
             if self.count >= self.max_collect or sub_count >= max:
@@ -273,6 +282,7 @@ class gems_runner:
         program_data = {"count": self.count}
         json.dump(program_data, self.program_data_f)
         self.program_data_f.close()
+        self.missed_comments.close()
         if self.perm is not None:
             np.savetxt(os.path.join(self.output_dir, "perms.txt"), self.perm)
 
