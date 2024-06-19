@@ -26,6 +26,11 @@ def get_formatted_time():
     return time.strftime("%Y-%m-%d-%H-%M-%S")
 
 
+def to_b36(id: int) -> str:
+    """Get the base 36 repr of an ID to pass to Reddit or store"""
+    return np.base_repr(id, 36).lower()
+
+
 class permutaion:
     def __init__(self, start: int, stop: int, overwrite: bool) -> None:
         pass
@@ -101,13 +106,11 @@ class gems_runner:
 
         self.logger.info("init complete")
 
-        # file getters
-        self.get_perm_file_name = lambda start, stop: os.path.join(
-            self.output_dir, f"perm-{str(start)}-{str(stop)}.perm"
-        )
-        self.get_pos_file_name = lambda start, stop: os.path.join(
-            self.output_dir, f"pos-{str(start)}-{str(stop)}.perm"
-        )
+    def get_perm_file_name(self, start: int, end: int):
+        return os.path.join(self.output_dir, f"perm-{to_b36(start)}-{to_b36(end)}.txt")
+
+    def get_pos_file_name(self, start: int, end: int):
+        return os.path.join(self.output_dir, f"pos-{to_b36(start)}-{to_b36(end)}.txt")
 
     def create_err(self, err_msg: str, logger: logging.Logger):
         """logs error and kills program
@@ -199,7 +202,6 @@ class gems_runner:
     def run_sub_section(self, start: int, stop: int, max: int):
         """Runs the full system for the based on inisialized values."""
         sub_count = 0
-        make_request_str_from_id = lambda id: f"t1_{np.base_repr(id, 36).lower()}"
 
         # if(None == self.perm): # if we dont have a permutation yet make it
         self.perm = np.random.permutation(
@@ -216,9 +218,7 @@ class gems_runner:
 
         for i, id_request_goup in enumerate(perm_by_request_call):
             self.logger.debug(f"Attempting group {i} of size {REQUEST_PER_CALL}")
-            id_request_str_group = [
-                make_request_str_from_id(int(id)) for id in id_request_goup
-            ]
+            id_request_str_group = [f"t1_{to_b36(int(id))}" for id in id_request_goup]
 
             try:
                 ret = self.reddit.info(fullnames=list(id_request_str_group))
