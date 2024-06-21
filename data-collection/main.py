@@ -9,7 +9,7 @@ import logging
 import argparse
 import praw
 import json
-from typing import Optional
+import signal
 import sys
 import numpy.typing as npt
 
@@ -30,6 +30,31 @@ def get_formatted_time():
 def to_b36(id: int) -> str:
     """Get the base 36 repr of an ID to pass to Reddit or store"""
     return np.base_repr(id, 36).lower()
+
+
+class ProtectedBlock:
+    """
+    A context manager to protect a block from being interrupted by Ctrl+C.
+
+    Copied from https://stackoverflow.com/a/21919644.
+    """
+
+    def __enter__(self):
+        self.signal_received = None
+        self.old_handler = signal.signal(signal.SIGINT, self.handler)
+
+    def handler(self, sig, frame):
+        self.signal_received = (sig, frame)
+
+    def __exit__(self, _type, _value, _traceback):
+        signal.signal(signal.SIGINT, self.old_handler)
+        if self.signal_received is not None:
+            # We were interrupted at some point, time to die now
+            if callable(self.old_handler):
+                self.old_handler(*self.signal_received)
+            else:
+                # TODO should we even bother handling this?
+                exit(1)
 
 
 class permutaion:
@@ -83,7 +108,9 @@ class gems_runner:
 
         self.program_data_f = open(os.path.join(output_dir, "program_data.json"), mode)
 
-        self.missed_comments = gzip.open(os.path.join(output_dir, "missed-comments.txt.gz"), "at")
+        self.missed_comments = gzip.open(
+            os.path.join(output_dir, "missed-comments.txt.gz"), "at"
+        )
         """IDs of comments that Reddit didn't return any info for"""
 
         if overwrite or not os.path.isfile(os.path.join(output_dir, "perm.")):
@@ -270,11 +297,12 @@ class gems_runner:
 
     def run(self):
         for i in tqdm.trange(self.start_comment, self.end_comment, SIZE_OF_ITERATION):
-            self.run_sub_section(
-                i,
-                i + SIZE_OF_ITERATION,
-                int(self.max_collect / (self.start_comment - self.end_comment)),
-            )
+            with ProtectedBlock():
+                self.run_sub_section(
+                    i,
+                    i + SIZE_OF_ITERATION,
+                    int(self.max_collect / (self.start_comment - self.end_comment)),
+                )
 
     def close(self):
         """Closes all open files."""
