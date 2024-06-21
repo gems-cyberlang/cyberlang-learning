@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from dotenv import load_dotenv
 import numpy as np
 import os
@@ -11,6 +12,7 @@ import praw
 import json
 import signal
 import sys
+from typing import Optional
 import numpy.typing as npt
 
 import praw.exceptions
@@ -62,6 +64,30 @@ class permutaion:
         pass
 
 
+@dataclass
+class Bin:
+    """For keeping track of work done in a range of IDs"""
+
+    start: int
+    """Start of this range (inclusive)"""
+    end: int
+    """End of this bin (exclusive)"""
+    max: int = 0
+    """Maximum number of comments to collect in this bin"""
+    num_hits: int = 0
+    """Number of IDs that we requested and actually got"""
+    num_misses: int = 0
+    """Number of IDs that we requested but turned out to be inaccessible"""
+
+    def total_requested(self) -> int:
+        """How many comments have been requested in this bin so far"""
+        return self.num_hits + self.num_misses
+
+    def __contains__(self, id: int) -> bool:
+        """Is this necessary? No. But I've always wanted to overload `in` so please let me have this"""
+        return self.start <= id < self.end
+
+
 class gems_runner:
     def __init__(
         self,
@@ -93,6 +119,12 @@ class gems_runner:
         self.client_id = client_id
         self.reddit_secret = reddit_secret
         self.overwrite = overwrite
+        self.bins = [
+            Bin(bin_start, min(bin_start + SIZE_OF_ITERATION, self.end_comment))
+            for bin_start in range(
+                self.start_comment, self.end_comment, SIZE_OF_ITERATION
+            )
+        ]
 
         mode = "w+" if overwrite else "a+"
 
@@ -108,10 +140,22 @@ class gems_runner:
 
         self.program_data_f = open(os.path.join(output_dir, "program_data.json"), mode)
 
-        self.missed_comments = gzip.open(
-            os.path.join(output_dir, "missed-comments.txt.gz"), "at"
+        missed_path = os.path.join(output_dir, "missed-comments.txt.gz")
+        load_missed = os.path.exists(missed_path) and not overwrite
+        self.missed_comments_file = gzip.open(
+            os.path.join(output_dir, "missed-comments.txt.gz"),
+            "wt" if overwrite else "at",
         )
-        """IDs of comments that Reddit didn't return any info for"""
+        """Store IDs of comments that Reddit didn't return any info for"""
+        if load_missed:
+            for id in self.missed_comments_file.readlines():
+                bin = self.find_bin(int(id, 36))
+                if bin is None:
+                    self.logger.error(
+                        f"ID {id} doesn't go into any of our current bins"
+                    )
+                    exit(1)
+                bin.num_misses += 1
 
         if overwrite or not os.path.isfile(os.path.join(output_dir, "perm.")):
             self.perm = None
@@ -152,6 +196,13 @@ class gems_runner:
         """
         logger.error("ERROR: " + err_msg)
         exit(1)
+
+    def find_bin(self, id: int) -> Optional[Bin]:
+        """Find the bin that the given ID goes into (None if it doesn't go into any of the bins)"""
+        for bin in self.bins:
+            if id in bin:
+                return bin
+        return None
 
     def _init_logging(
         self,
@@ -287,7 +338,10 @@ class gems_runner:
                     )
 
             for id in misses:
-                self.missed_comments.write(f"{id}\n")
+                bin = self.find_bin(int(id, 36))
+                assert bin is not None, id
+                bin.num_misses += 1
+                self.missed_comments_file.write(f"{id}\n")
 
             self.logger.debug(f"Completed group {i} of size {REQUEST_PER_CALL}")
             if self.count >= self.max_collect or sub_count >= max:
@@ -310,7 +364,7 @@ class gems_runner:
         program_data = {"count": self.count}
         json.dump(program_data, self.program_data_f)
         self.program_data_f.close()
-        self.missed_comments.close()
+        self.missed_comments_file.close()
         if self.perm is not None:
             np.savetxt(os.path.join(self.output_dir, "perms.txt"), self.perm)
 
