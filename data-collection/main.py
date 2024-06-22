@@ -1,3 +1,4 @@
+from collections import deque
 from dataclasses import dataclass
 from dotenv import load_dotenv
 import numpy as np
@@ -72,8 +73,8 @@ class Bin:
     """Start of this range (inclusive)"""
     end: int
     """End of this bin (exclusive)"""
-    max: int = 0
-    """Maximum number of comments to collect in this bin"""
+    min: int = 0
+    """Minimum number of comments to collect in this bin"""
     num_hits: int = 0
     """Number of IDs that we requested and actually got"""
     num_misses: int = 0
@@ -82,6 +83,11 @@ class Bin:
     def total_requested(self) -> int:
         """How many comments have been requested in this bin so far"""
         return self.num_hits + self.num_misses
+
+    def remaining(self) -> int:
+        """How many IDs in this range we haven't requested yet"""
+        total_available = self.end - self.start
+        return total_available - self.total_requested()
 
     def __contains__(self, id: int) -> bool:
         """Is this necessary? No. But I've always wanted to overload `in` so please let me have this"""
@@ -120,7 +126,11 @@ class gems_runner:
         self.reddit_secret = reddit_secret
         self.overwrite = overwrite
         self.bins = [
-            Bin(bin_start, min(bin_start + SIZE_OF_ITERATION, self.end_comment))
+            Bin(
+                bin_start,
+                min(bin_start + SIZE_OF_ITERATION, self.end_comment),
+                min=1,  # just a dummy value for now
+            )
             for bin_start in range(
                 self.start_comment, self.end_comment, SIZE_OF_ITERATION
             )
@@ -141,21 +151,17 @@ class gems_runner:
         self.program_data_f = open(os.path.join(output_dir, "program_data.json"), mode)
 
         missed_path = os.path.join(output_dir, "missed-comments.txt.gz")
-        load_missed = os.path.exists(missed_path) and not overwrite
-        self.missed_comments_file = gzip.open(
-            os.path.join(output_dir, "missed-comments.txt.gz"),
-            "wt" if overwrite else "at",
-        )
-        """Store IDs of comments that Reddit didn't return any info for"""
-        if load_missed:
-            for id in self.missed_comments_file.readlines():
+        if os.path.exists(missed_path) and not overwrite:
+            missed_comments_file = gzip.open(missed_path, "rt")
+            for id in missed_comments_file.readlines():
                 bin = self.find_bin(int(id, 36))
                 if bin is None:
-                    self.logger.error(
+                    raise AssertionError(
                         f"ID {id} doesn't go into any of our current bins"
                     )
-                    exit(1)
                 bin.num_misses += 1
+        self.missed_comments_file = gzip.open(missed_path, "wt" if overwrite else "at")
+        """Store IDs of comments that Reddit didn't return any info for"""
 
         if overwrite or not os.path.isfile(os.path.join(output_dir, "perm.")):
             self.perm = None
@@ -281,82 +287,112 @@ class gems_runner:
         pos_file_name = self.get_pos_file_name()
         np.savetext(pos_file_name)
 
-    def run_sub_section(self, start: int, stop: int, max: int):
-        """Runs the full system for the based on inisialized values."""
-        sub_count = 0
+    def request_batch(self, id_ints: list[int]):
+        """
+        Requests the given IDs in a single API call.
 
-        # if(None == self.perm): # if we dont have a permutation yet make it
-        self.perm = np.random.permutation(
-            np.arange(start=start, stop=stop, dtype=np.uint64)
-        )
+        Make sure that there are no more than `REQUEST_PER_CALL` (100) of them
+        """
+        i = None  # TODO idk what to assign to this
+        self.logger.debug(f"Attempting group {i} of size {REQUEST_PER_CALL}")
+        ids = [to_b36(int(id)) for id in id_ints]
 
-        pad = np.zeros(
-            [REQUEST_PER_CALL - self.perm.shape[0] % REQUEST_PER_CALL]
-        )  # Create array of zeros to pad
-        self.perm = np.append(self.perm, pad)
-        perm_by_request_call = np.reshape(
-            self.perm, [int(self.perm.shape[0] / REQUEST_PER_CALL), REQUEST_PER_CALL]
-        )
+        try:
+            ret = self.reddit.info(fullnames=[f"t1_{id}" for id in ids])
+        except praw.exceptions.PRAWException as e:
+            self.logger.error(f"Praw error: {e}")
+            self.logger.error(
+                f"Praw through a exeception in batch {i} of size {REQUEST_PER_CALL}"
+            )
+            return
 
-        for i, id_request_goup in enumerate(perm_by_request_call):
-            self.logger.debug(f"Attempting group {i} of size {REQUEST_PER_CALL}")
-            ids = [to_b36(int(id)) for id in id_request_goup]
-
-            try:
-                ret = self.reddit.info(fullnames=[f"t1_{id}" for id in ids])
-            except praw.exceptions.PRAWException as e:
-                self.logger.error(f"Praw error: {e}")
-                self.logger.error(
-                    f"Praw through a exeception in batch {i} of size {REQUEST_PER_CALL}"
+        misses = set(ids)
+        for submission in ret:
+            if type(submission) == praw.models.Comment:
+                misses.remove(submission.id)
+                self.main_csv.writerow(
+                    [
+                        int(submission.created_utc),
+                        submission.id,
+                        str(submission.body)
+                        .replace("\r\n", " ")
+                        .replace("\r", " ")
+                        .replace("\n", " "),
+                        submission.permalink,
+                        submission.score,
+                        submission.subreddit_id,
+                    ]
                 )
-                continue
+                self.logger.debug(f"saved {submission.id}")
+                self.count += 1
+                bin = self.find_bin(int(submission.id, 36))
+                assert bin is not None, submission.id
+                bin.num_hits += 1
+            else:
+                self.logger.error(
+                    f"{submission.id} was not a comment it had type {type(submission)}"
+                )
 
-            misses = set(ids)
-            for submission in ret:
-                if type(submission) == praw.models.Comment:
-                    misses.remove(submission.id)
-                    self.main_csv.writerow(
-                        [
-                            int(submission.created_utc),
-                            submission.id,
-                            str(submission.body)
-                            .replace("\r\n", " ")
-                            .replace("\r", " ")
-                            .replace("\n", " "),
-                            submission.permalink,
-                            submission.score,
-                            submission.subreddit_id,
-                        ]
-                    )
-                    self.logger.debug(f"saved {submission.id}")
-                    self.count += 1
-                    if self.count >= self.max_collect or sub_count >= max:
-                        break
-                else:
-                    self.logger.error(
-                        f"{submission.id} was not a comment it had type {type(submission)}"
-                    )
+        for id in misses:
+            bin = self.find_bin(int(id, 36))
+            assert bin is not None, id
+            bin.num_misses += 1
+            self.missed_comments_file.write(f"{id}\n")
 
-            for id in misses:
-                bin = self.find_bin(int(id, 36))
-                assert bin is not None, id
-                bin.num_misses += 1
-                self.missed_comments_file.write(f"{id}\n")
+        self.main_csv_f.flush()
 
-            self.logger.debug(f"Completed group {i} of size {REQUEST_PER_CALL}")
-            if self.count >= self.max_collect or sub_count >= max:
-                break
-
-        self.logger.debug(f"End of list reached or max number of hits gotten")
+        self.logger.debug(f"Completed group {i} of size {REQUEST_PER_CALL}")
 
     def run(self):
-        for i in tqdm.trange(self.start_comment, self.end_comment, SIZE_OF_ITERATION):
-            with ProtectedBlock():
-                self.run_sub_section(
-                    i,
-                    i + SIZE_OF_ITERATION,
-                    int(self.max_collect / (self.start_comment - self.end_comment)),
+        # TODO figure out how to use tqdm with this
+
+        remaining = deque(self.bins)
+        while True:
+            remaining = deque(
+                bin
+                for bin in remaining
+                if bin.num_hits < bin.min and bin.remaining() > 0
+            )
+            if len(remaining) == 0:
+                self.logger.debug("No more IDs to request, stopping.")
+                return
+            # No need to consider bins beyond the first 100
+            if len(remaining) > REQUEST_PER_CALL:
+                front_bins = []
+                for _ in range(REQUEST_PER_CALL):
+                    bin = remaining.popleft()
+                    front_bins.append(bin)
+                    remaining.append(bin)
+            else:
+                front_bins = list(remaining)
+
+            # Number of IDs to request from each remaining bin
+            num_ids = [1] * len(front_bins)
+            while sum(num_ids) < REQUEST_PER_CALL and any(
+                bin.remaining() > num_ids[i] for i, bin in enumerate(front_bins)
+            ):
+                for i, bin in enumerate(front_bins):
+                    if bin.remaining() > num_ids[i]:
+                        num_ids[i] += 1
+                        if sum(num_ids) == REQUEST_PER_CALL:
+                            break
+
+            next_ids: list[int] = []
+            for i, bin in enumerate(front_bins):
+                perm = np.random.default_rng(seed=[bin.start, bin.end]).permutation(
+                    np.arange(start=bin.start, stop=bin.end, dtype=np.uint64)
                 )
+                next_ids.extend(
+                    map(
+                        int,
+                        perm[
+                            bin.total_requested() : bin.total_requested() + num_ids[i]
+                        ],
+                    )
+                )
+            with ProtectedBlock():
+                self.logger.debug(f"Requesting {','.join(map(to_b36, next_ids))}")
+                self.request_batch(next_ids)
 
     def close(self):
         """Closes all open files."""
@@ -488,5 +524,7 @@ if __name__ == "__main__":
         praw_log_level=praw_log_level,
     )
 
-    runner.run()
-    runner.close()
+    try:
+        runner.run()
+    finally:
+        runner.close()
