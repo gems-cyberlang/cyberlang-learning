@@ -1,0 +1,12 @@
+# These are totally made-up numbers, please change them
+
+timeStart: 2020-01-01
+timeStep: 16 # 16 weeks = 4 months
+timeRanges:
+  - start: k000000
+    min: 5
+  - start: ka00000
+    min: 10
+  - start: kw00000
+    min: 4
+    end: l000000

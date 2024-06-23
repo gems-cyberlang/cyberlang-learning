@@ -1,10 +1,13 @@
+from abc import ABC, abstractmethod
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+import datetime
 from dotenv import load_dotenv
 import numpy as np
 import os
 import csv
 import gzip
+import itertools
 import time
 import tqdm
 import logging
@@ -13,8 +16,9 @@ import praw
 import json
 import signal
 import sys
-from typing import Optional
+from typing import Generic, Iterable, Optional, TypeVar
 import numpy.typing as npt
+import yaml
 
 import praw.exceptions
 import praw.models
@@ -65,41 +69,233 @@ class permutaion:
         pass
 
 
-@dataclass
-class Bin:
-    """For keeping track of work done in a range of IDs"""
+class AbstractBin(ABC):
+    @property
+    @abstractmethod
+    def start_id(self) -> int:
+        pass
 
-    start: int
-    """Start of this range (inclusive)"""
-    end: int
-    """End of this bin (exclusive)"""
-    min: int = 0
-    """Minimum number of comments to collect in this bin"""
-    num_hits: int = 0
-    """Number of IDs that we requested and actually got"""
-    num_misses: int = 0
-    """Number of IDs that we requested but turned out to be inaccessible"""
+    @property
+    @abstractmethod
+    def end_id(self) -> int:
+        pass
 
-    def total_requested(self) -> int:
-        """How many comments have been requested in this bin so far"""
-        return self.num_hits + self.num_misses
+    @abstractmethod
+    def requested(self) -> int:
+        """How many IDs in this time range we've requested"""
 
-    def remaining(self) -> int:
-        """How many IDs in this range we haven't requested yet"""
-        total_available = self.end - self.start
-        return total_available - self.total_requested()
+    @abstractmethod
+    def unrequested(self) -> int:
+        """
+        How many IDs in this range have not been requested yet.
+
+        Note: This has nothing to do with the minimum number of IDs that must be
+        requested in a time range.
+        """
+
+    def needed(self) -> int:
+        """How many comments we still need from this range"""
+        return 0
+    
+    def add_hit(self, id: int) -> None:
+        """We got a comment!"""
+
+    def add_miss(self, id: int) -> None:
+        """Record the fact that the given `id` wasn't accessible"""
+
+    @abstractmethod
+    def next_ids(self, n: int) -> list[int]:
+        """
+        Generate the next n IDs in this range.
+
+        For `BinBin`s, this modifies state (though not for `PermBin`s)
+        """
 
     def __contains__(self, id: int) -> bool:
-        """Is this necessary? No. But I've always wanted to overload `in` so please let me have this"""
-        return self.start <= id < self.end
+        """Is this necessary? No. But I've always wanted to overload `in`, so please let me have this"""
+        return self.start_id <= id < self.end_id
+
+
+@dataclass
+class PermBin(AbstractBin):
+    """For keeping track of work done in a range of IDs within a `TimeRange`. Each
+    `TimeRange` is made up of a bunch of `PermBin`s"""
+
+    def __init__(self, start: int, end: int):
+        """
+        # Arguments
+        * `start` - First ID in this range (inclusive)
+        * `end` - End of this range (exclusive)
+        * `hits` - How
+
+        """
+        self._start_id = start
+        self._end_id = end
+        self.hits = 0
+        """Number of IDs that we requested and actually got"""
+        self.misses = 0
+        """Number of IDs that we requested but turned out to be inaccessible"""
+
+    def requested(self) -> int:
+        """How many comments have been requested in this bin so far"""
+        return self.hits + self.misses
+
+    def unrequested(self) -> int:
+        total_available = self.end_id - self.start_id
+        return total_available - self.requested()
+
+    def next_ids(self, n: int) -> list[int]:
+        perm = np.random.default_rng(seed=[self.start_id, self.end_id]).permutation(
+            np.arange(start=self.start_id, stop=self.end_id, dtype=np.uint64)
+        )
+        return list(map(int, perm[self.requested() : self.requested() + n]))
+
+    @property
+    def start_id(self):
+        return self._start_id
+
+    @property
+    def end_id(self):
+        return self._end_id
+
+
+T = TypeVar("T", bound=AbstractBin)
+
+
+class BinBin(Generic[T], AbstractBin):
+    """A bin containing other bins (of type `T`)"""
+
+    def __init__(self, bins: list[T]):
+        self.bins = bins
+        self._remaining = deque(self.bins)
+        self._update_remaining()
+
+    def requested(self) -> int:
+        return sum(bin.requested() for bin in self.bins)
+
+    def unrequested(self) -> int:
+        return sum(bin.unrequested() for bin in self.bins)
+
+    def find_bin(self, id: int) -> Optional[T]:
+        """Find the bin that the given ID goes into (None if it doesn't go into any of the bins)"""
+        if id in self:
+            for bin in self.bins:
+                if id in bin:
+                    return bin
+            raise AssertionError(
+                f"ID {id} should have fit into one of the bins in {self}"
+            )
+        else:
+            return None
+
+    def next_ids(self, n: int) -> list[int]:
+        """
+        Get the next n IDs.
+
+        Every time this is called, it will rotate through the remaining bins
+        """
+        self._update_remaining()
+
+        # If we have more than n bins, only need to look at the first n
+        num_bins = min(n, len(self._remaining))
+        front_bins = list(itertools.islice(self._remaining, num_bins))
+        if num_bins > len(self._remaining):
+            self._remaining.rotate(-num_bins)
+
+        # Number of IDs to request from each remaining bin
+        num_ids = [1] * len(front_bins)
+
+        print(f"got front_bins {len(front_bins)}")
+
+        while sum(num_ids) < n and any(
+            bin.unrequested() > num_ids[i] for i, bin in enumerate(front_bins)
+        ):
+            for i, bin in enumerate(front_bins):
+                if bin.unrequested() > num_ids[i]:
+                    num_ids[i] += 1
+                    if sum(num_ids) == n:
+                        break
+
+        return list(
+            itertools.chain.from_iterable(
+                bin.next_ids(n) for bin, n in zip(front_bins, num_ids)
+            )
+        )
+
+    def _update_remaining(self):
+        self._remaining = deque(bin for bin in self._remaining if bin.unrequested() > 0)
+
+
+class TimeRange(BinBin):
+    """For keeping track of work done in a time range"""
+
+    def __init__(
+        self,
+        start_date: datetime.date,
+        end_date: datetime.date,
+        start_id: int,
+        end_id: int,
+        min_comments: int,
+    ):
+        """
+        # Arguments
+        * `start_date` and `end_date` - Only used for displaying data.
+        * `start_id` - First ID in this range (inclusive)
+        * `end_id` - End of this range (exclusive)
+        * `min_comments` - Minimum number of comments to collect in this time range.
+
+        """
+        self.start_date = start_date
+        self.end_date = end_date
+        self._start_id = start_id
+        self._end_id = end_id
+        self.min = min_comments
+
+        super().__init__(
+            [
+                PermBin(
+                    bin_start,
+                    min(bin_start + SIZE_OF_ITERATION, self.end_id),
+                )
+                for bin_start in range(self.start_id, self.end_id, SIZE_OF_ITERATION)
+            ]
+        )
+
+    def needed(self) -> int:
+        return max(0, self.min - self.requested())
+
+    @property
+    def start_id(self):
+        return self._start_id
+
+    @property
+    def end_id(self):
+        return self._end_id
+
+
+U = TypeVar("U", bound=BinBin)
+class BinBinBin(BinBin[U]):
+    """Couldn't think of a better name"""
+
+    def __init__(self, bins: list[U]):
+        super().__init__(bins)
+        assert all(bins[i].end_id == bins[i + 1].start_id for i in range(len(bins) - 1))
+        self._start_id = bins[0].start_id
+        self._end_id = bins[len(bins) - 1].end_id
+
+    @property
+    def start_id(self):
+        return self._start_id
+
+    @property
+    def end_id(self):
+        return self._end_id
 
 
 class gems_runner:
     def __init__(
         self,
-        max_collect: int,
-        start_comment: int,
-        end_comment: int,
+        time_ranges: list[TimeRange],
         client_id: str,
         reddit_secret: str,
         output_dir: str,
@@ -119,30 +315,19 @@ class gems_runner:
         self.logger.info("Logging started")
 
         self.output_dir = output_dir
-        self.max_collect = max_collect
-        self.start_comment = start_comment
-        self.end_comment = end_comment
         self.client_id = client_id
         self.reddit_secret = reddit_secret
         self.overwrite = overwrite
-        self.bins = [
-            Bin(
-                bin_start,
-                min(bin_start + SIZE_OF_ITERATION, self.end_comment),
-                min=1,  # just a dummy value for now
-            )
-            for bin_start in range(
-                self.start_comment, self.end_comment, SIZE_OF_ITERATION
-            )
-        ]
+        self.time_ranges = BinBinBin(time_ranges)
 
         mode = "w+" if overwrite else "a+"
 
-        write_rows = overwrite or not os.path.isfile(  # Come back and fix this
-            os.path.join(output_dir, "comments.csv")
-        )
+        # Come back and fix this
+        # TODO wait fix what?
+        comments_path = os.path.join(output_dir, "comments.csv")
+        write_rows = overwrite or not os.path.isfile(comments_path)
 
-        self.main_csv_f = open(os.path.join(output_dir, "comments.csv"), mode)
+        self.main_csv_f = open(comments_path, mode)
         self.main_csv = csv.writer(self.main_csv_f)
 
         if write_rows:
@@ -154,12 +339,7 @@ class gems_runner:
         if os.path.exists(missed_path) and not overwrite:
             missed_comments_file = gzip.open(missed_path, "rt")
             for id in missed_comments_file.readlines():
-                bin = self.find_bin(int(id, 36))
-                if bin is None:
-                    raise AssertionError(
-                        f"ID {id} doesn't go into any of our current bins"
-                    )
-                bin.num_misses += 1
+                self.time_ranges.add_miss(int(id, 36))
         self.missed_comments_file = gzip.open(missed_path, "wt" if overwrite else "at")
         """Store IDs of comments that Reddit didn't return any info for"""
 
@@ -202,13 +382,6 @@ class gems_runner:
         """
         logger.error("ERROR: " + err_msg)
         exit(1)
-
-    def find_bin(self, id: int) -> Optional[Bin]:
-        """Find the bin that the given ID goes into (None if it doesn't go into any of the bins)"""
-        for bin in self.bins:
-            if id in bin:
-                return bin
-        return None
 
     def _init_logging(
         self,
@@ -283,9 +456,9 @@ class gems_runner:
 
         return perm, pos, pos_file_name
 
-    def update_pos(self, pos: npt.ArrayLike):
-        pos_file_name = self.get_pos_file_name()
-        np.savetext(pos_file_name)
+    # def update_pos(self, pos: npt.ArrayLike):
+    #     pos_file_name = self.get_pos_file_name()
+    #     np.savetext(pos_file_name)
 
     def request_batch(self, id_ints: list[int]):
         """
@@ -325,18 +498,14 @@ class gems_runner:
                 )
                 self.logger.debug(f"saved {submission.id}")
                 self.count += 1
-                bin = self.find_bin(int(submission.id, 36))
-                assert bin is not None, submission.id
-                bin.num_hits += 1
+                self.time_ranges.add_hit(int(submission.id, 36))
             else:
                 self.logger.error(
                     f"{submission.id} was not a comment it had type {type(submission)}"
                 )
 
         for id in misses:
-            bin = self.find_bin(int(id, 36))
-            assert bin is not None, id
-            bin.num_misses += 1
+            self.time_ranges.add_miss(int(id, 36))
             self.missed_comments_file.write(f"{id}\n")
 
         self.main_csv_f.flush()
@@ -346,50 +515,9 @@ class gems_runner:
     def run(self):
         # TODO figure out how to use tqdm with this
 
-        remaining = deque(self.bins)
         while True:
-            remaining = deque(
-                bin
-                for bin in remaining
-                if bin.num_hits < bin.min and bin.remaining() > 0
-            )
-            if len(remaining) == 0:
-                self.logger.debug("No more IDs to request, stopping.")
-                return
-            # No need to consider bins beyond the first 100
-            if len(remaining) > REQUEST_PER_CALL:
-                front_bins = []
-                for _ in range(REQUEST_PER_CALL):
-                    bin = remaining.popleft()
-                    front_bins.append(bin)
-                    remaining.append(bin)
-            else:
-                front_bins = list(remaining)
-
-            # Number of IDs to request from each remaining bin
-            num_ids = [1] * len(front_bins)
-            while sum(num_ids) < REQUEST_PER_CALL and any(
-                bin.remaining() > num_ids[i] for i, bin in enumerate(front_bins)
-            ):
-                for i, bin in enumerate(front_bins):
-                    if bin.remaining() > num_ids[i]:
-                        num_ids[i] += 1
-                        if sum(num_ids) == REQUEST_PER_CALL:
-                            break
-
-            next_ids: list[int] = []
-            for i, bin in enumerate(front_bins):
-                perm = np.random.default_rng(seed=[bin.start, bin.end]).permutation(
-                    np.arange(start=bin.start, stop=bin.end, dtype=np.uint64)
-                )
-                next_ids.extend(
-                    map(
-                        int,
-                        perm[
-                            bin.total_requested() : bin.total_requested() + num_ids[i]
-                        ],
-                    )
-                )
+            next_ids = self.time_ranges.next_ids(REQUEST_PER_CALL)
+            print("got ids!")
             with ProtectedBlock():
                 self.logger.debug(f"Requesting {','.join(map(to_b36, next_ids))}")
                 self.request_batch(next_ids)
@@ -414,12 +542,8 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "max_collect", type=int, help="The max number of comments to collect"
+        "--config-file", "-c", type=str, default=os.path.join(curr_dir, "config.yaml")
     )
-    parser.add_argument(
-        "start_id", type=str, help="The comment ID to start at (base 36)"
-    )
-    parser.add_argument("end_id", type=str, help="The comment ID to end at (base 36)")
     parser.add_argument(
         "--output-dir",
         type=str,
@@ -465,6 +589,32 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    config = yaml.safe_load(open(args.config_file))
+    time_step = datetime.timedelta(weeks=config["timeStep"])
+    time_ranges_raw: list[dict] = config["timeRanges"]
+    time_ranges = []
+    start_time: datetime.date = config["timeStart"]
+    for i, time_range in enumerate(time_ranges_raw):
+        start_id = int(time_range["start"], 36)
+        if "end" in time_range:
+            end_id = int(time_range["end"], 36)
+        elif i + 1 < len(time_ranges_raw):
+            end_id = int(time_ranges_raw[i + 1]["start"], 36)
+        else:
+            raise AssertionError(
+                f"An end ID should've been given for time range {time_range}"
+            )
+        time_ranges.append(
+            TimeRange(
+                start_date=start_time,
+                end_date=start_time + time_step,
+                start_id=start_id,
+                end_id=end_id,
+                min_comments=time_range["min"],
+            )
+        )
+        start_time += time_step
+
     # Load env
     if not load_dotenv(args.env_file):
         print(f"You need a env file at {args.env_file}")
@@ -499,11 +649,8 @@ if __name__ == "__main__":
     else:
         praw_log_level = logging.CRITICAL
 
-    start = int(args.start_id, 36)
-    end = int(args.end_id, 36)
-
     if args.output_dir is None:
-        output_dir = os.path.join(curr_dir, f"out_{args.start_id}-{args.end_id}")
+        output_dir = os.path.join(curr_dir, f"out")
     else:
         output_dir = args.output_dir
 
@@ -513,9 +660,7 @@ if __name__ == "__main__":
         log_file = args.log_file
 
     runner = gems_runner(
-        args.max_collect,
-        start,
-        end,
+        time_ranges,
         client_id,
         reddit_secret,
         output_dir=output_dir,
