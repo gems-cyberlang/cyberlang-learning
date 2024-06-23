@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 from collections import deque
-from dataclasses import dataclass, field
 import datetime
 from dotenv import load_dotenv
 import numpy as np
@@ -16,7 +15,7 @@ import praw
 import json
 import signal
 import sys
-from typing import Generic, Iterable, Optional, TypeVar
+from typing import Generic, Optional, TypeVar
 import numpy.typing as npt
 import yaml
 
@@ -96,12 +95,14 @@ class AbstractBin(ABC):
     def needed(self) -> int:
         """How many comments we still need from this range"""
         return 0
-    
-    def add_hit(self, id: int) -> None:
-        """We got a comment!"""
 
-    def add_miss(self, id: int) -> None:
-        """Record the fact that the given `id` wasn't accessible"""
+    @abstractmethod
+    def notify_requested(self, id: int, hit: bool):
+        """
+        Record the fact that we requested the given ID.
+
+        If `hit` is true, we were able to read the comment
+        """
 
     @abstractmethod
     def next_ids(self, n: int) -> list[int]:
@@ -116,7 +117,6 @@ class AbstractBin(ABC):
         return self.start_id <= id < self.end_id
 
 
-@dataclass
 class PermBin(AbstractBin):
     """For keeping track of work done in a range of IDs within a `TimeRange`. Each
     `TimeRange` is made up of a bunch of `PermBin`s"""
@@ -149,6 +149,13 @@ class PermBin(AbstractBin):
             np.arange(start=self.start_id, stop=self.end_id, dtype=np.uint64)
         )
         return list(map(int, perm[self.requested() : self.requested() + n]))
+
+    def notify_requested(self, id: int, hit: bool):
+        assert id in self, f"{to_b36(id)} not in {self}"
+        if hit:
+            self.hits += 1
+        else:
+            self.misses += 1
 
     @property
     def start_id(self):
@@ -187,6 +194,11 @@ class BinBin(Generic[T], AbstractBin):
             )
         else:
             return None
+
+    def notify_requested(self, id: int, hit: bool):
+        bin = self.find_bin(id)
+        assert bin is not None, f"{to_b36(id)} not in {self}"
+        bin.notify_requested(id, hit)
 
     def next_ids(self, n: int) -> list[int]:
         """
@@ -274,6 +286,8 @@ class TimeRange(BinBin):
 
 
 U = TypeVar("U", bound=BinBin)
+
+
 class BinBinBin(BinBin[U]):
     """Couldn't think of a better name"""
 
@@ -339,7 +353,7 @@ class gems_runner:
         if os.path.exists(missed_path) and not overwrite:
             missed_comments_file = gzip.open(missed_path, "rt")
             for id in missed_comments_file.readlines():
-                self.time_ranges.add_miss(int(id, 36))
+                self.time_ranges.notify_requested(int(id, 36), False)
         self.missed_comments_file = gzip.open(missed_path, "wt" if overwrite else "at")
         """Store IDs of comments that Reddit didn't return any info for"""
 
@@ -498,14 +512,14 @@ class gems_runner:
                 )
                 self.logger.debug(f"saved {submission.id}")
                 self.count += 1
-                self.time_ranges.add_hit(int(submission.id, 36))
+                self.time_ranges.notify_requested(int(submission.id, 36), True)
             else:
                 self.logger.error(
                     f"{submission.id} was not a comment it had type {type(submission)}"
                 )
 
         for id in misses:
-            self.time_ranges.add_miss(int(id, 36))
+            self.time_ranges.notify_requested(int(id, 36), False)
             self.missed_comments_file.write(f"{id}\n")
 
         self.main_csv_f.flush()
