@@ -109,9 +109,9 @@ class gems_runner:
 
         missed_path = os.path.join(output_dir, "missed-comments.txt.gz")
         if os.path.exists(missed_path) and not overwrite:
-            missed_comments_file = gzip.open(missed_path, "rt")
-            for id in missed_comments_file.readlines():
-                self.time_ranges.notify_requested(int(id, 36), False)
+            with gzip.open(missed_path, "rt") as missed_comments_file:
+                for id in missed_comments_file.readlines():
+                    self.time_ranges.notify_requested(int(id, 36), False)
         self.missed_comments_file = gzip.open(missed_path, "wt" if overwrite else "at")
         """Store IDs of comments that Reddit didn't return any info for"""
 
