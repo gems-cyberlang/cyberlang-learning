@@ -156,8 +156,6 @@ class BinBin(Generic[T], AbstractBin):
         # Number of IDs to request from each remaining bin
         num_ids = [1] * len(front_bins)
 
-        print(f"got front_bins {len(front_bins)}")
-
         while sum(num_ids) < n and any(
             bin.unrequested() > num_ids[i] for i, bin in enumerate(front_bins)
         ):

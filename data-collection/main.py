@@ -3,11 +3,13 @@ from dotenv import load_dotenv
 import numpy as np
 import os
 import csv
+from glob import glob
 import gzip
 import time
 import tqdm
 import logging
 import argparse
+import pandas as pd
 import praw
 import praw.exceptions
 import praw.models
@@ -23,6 +25,11 @@ USER_AGENT = "GEMSTONE CYBERLAND RESEARCH"
 ROWS = ["time", "comment_id", "body", "permalink", "score", "subreddit", "subreddit_id"]
 REQUEST_PER_CALL = 100
 LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+COMMENTS_FILE_NAME = "comments.csv"
+MISSED_FILE_NAME = "missed-ids.txt"
+LOG_FILE_NAME = "run.log"
+PROGRAM_DATA_FILE_NAME = "program_data.json"
 
 
 def get_formatted_time():
@@ -71,64 +78,60 @@ class gems_runner:
         client_id: str,
         reddit_secret: str,
         output_dir: str,
-        log_file: str,
         log_level: int,
         praw_log_level: int,
-        overwrite: bool = False,
     ) -> None:
+        self.output_dir = output_dir
+        self.client_id = client_id
+        self.reddit_secret = reddit_secret
+        self.time_ranges = BinBinBin(time_ranges)
+        self.timestamp = get_formatted_time()
+
         # Open files and directores loading data from there
         if not os.path.isdir(output_dir):
             os.mkdir(output_dir)  # make output directory if it dose not exits
 
-        # Start logging
-        self.logger = self._init_logging(
-            "gems_runner", log_file, log_level, praw_log_level
+        # Load data on previous runs
+        prev_run_dirs = glob("run_*", root_dir=self.output_dir)
+        prev_run_nums = sorted(
+            int(name.split("_", maxsplit=1)[1]) for name in prev_run_dirs
         )
+        if len(prev_run_nums) == 0:
+            # This is the first run
+            curr_run = 0
+        else:
+            assert len(prev_run_nums) == max(prev_run_nums) + 1, "Missing run detected"
+            curr_run = len(prev_run_nums)
+            for run_num in prev_run_nums:
+                run_path = os.path.join(output_dir, f"run_{run_num}")
+                comments = pd.read_csv(os.path.join(run_path, COMMENTS_FILE_NAME))
+                comments["comment_id"].apply(
+                    lambda id: self.time_ranges.notify_requested(int(id, 36), True)
+                )
+                del comments
+                with open(os.path.join(run_path, MISSED_FILE_NAME), "r") as misses_file:
+                    for id in misses_file.readlines():
+                        self.time_ranges.notify_requested(int(id, 36), False)
+
+        self.run_dir = os.path.join(output_dir, f"run_{curr_run}")
+        """Where all the data for this run goes"""
+        os.mkdir(self.run_dir)
+
+        # Start logging
+        self.logger = self._init_logging("gems_runner", log_level, praw_log_level)
         self.logger.info("Logging started")
-
-        self.output_dir = output_dir
-        self.client_id = client_id
-        self.reddit_secret = reddit_secret
-        self.overwrite = overwrite
-        self.time_ranges = BinBinBin(time_ranges)
-
-        mode = "w+" if overwrite else "a+"
 
         # Come back and fix this
         # TODO wait fix what?
-        comments_path = os.path.join(output_dir, "comments.csv")
-        write_rows = overwrite or not os.path.isfile(comments_path)
+        comments_path = os.path.join(self.run_dir, COMMENTS_FILE_NAME)
 
-        self.main_csv_f = open(comments_path, mode)
+        self.main_csv_f = open(comments_path, "w")
         self.main_csv = csv.writer(self.main_csv_f)
+        self.main_csv.writerow(ROWS)
 
-        if write_rows:
-            self.main_csv.writerow(ROWS)
-
-        self.program_data_f = open(os.path.join(output_dir, "program_data.json"), mode)
-
-        missed_path = os.path.join(output_dir, "missed-comments.txt.gz")
-        if os.path.exists(missed_path) and not overwrite:
-            with gzip.open(missed_path, "rt") as missed_comments_file:
-                for id in missed_comments_file.readlines():
-                    self.time_ranges.notify_requested(int(id, 36), False)
-        self.missed_comments_file = gzip.open(missed_path, "wt" if overwrite else "at")
+        missed_path = os.path.join(self.run_dir, MISSED_FILE_NAME)
+        self.missed_comments_file = open(missed_path, "w")
         """Store IDs of comments that Reddit didn't return any info for"""
-
-        if overwrite or not os.path.isfile(os.path.join(output_dir, "perm.")):
-            self.perm = None
-        else:
-            self.perm = np.loadtxt(os.path.join(output_dir, "perm.txt"))
-
-        if overwrite or not os.path.isfile(os.path.join(output_dir, "perm.txt")):
-            self.count = 0
-        else:
-            try:
-                program_data = json.load(self.program_data_f)
-                self.count = int(program_data.count)
-            except:
-                self.logger.error("Loading json file failed check formating")
-                exit(1)
 
         # Start reddit
         self.reddit = praw.Reddit(
@@ -138,12 +141,6 @@ class gems_runner:
         )
 
         self.logger.info("init complete")
-
-    def get_perm_file_name(self, start: int, end: int):
-        return os.path.join(self.output_dir, f"perm-{to_b36(start)}-{to_b36(end)}.txt")
-
-    def get_pos_file_name(self, start: int, end: int):
-        return os.path.join(self.output_dir, f"pos-{to_b36(start)}-{to_b36(end)}.txt")
 
     def create_err(self, err_msg: str, logger: logging.Logger):
         """logs error and kills program
@@ -158,7 +155,6 @@ class gems_runner:
     def _init_logging(
         self,
         logger_name: str,
-        log_file: str,
         log_level: int,
         praw_log_level: int,
     ) -> logging.Logger:
@@ -166,7 +162,6 @@ class gems_runner:
 
         Args:
             logger_name (str): Will be printed in logs
-            log_file: Name of file to log to
             log_level: What log level to use for our own logs
             praw_log_level: What log level to use for PRAW output to stderr
 
@@ -175,7 +170,11 @@ class gems_runner:
         """
         # Set up logging file
         # Global Log config
-        logging.basicConfig(level=logging.DEBUG, filename=log_file, format=LOG_FORMAT)
+        logging.basicConfig(
+            level=logging.DEBUG,
+            filename=os.path.join(self.run_dir, LOG_FILE_NAME),
+            format=LOG_FORMAT,
+        )
 
         # Praw logging goes to stderr
         praw_stderr_handler = logging.StreamHandler()
@@ -194,43 +193,6 @@ class gems_runner:
         logger.addHandler(our_stderr_handler)
 
         return logger
-
-    def get_perm(self, start: int, stop: int, max: int):
-        """Will get a permutaion if its exists if it dose not will open and save a new perm.
-        Note perm revocery is only possible if the SIZE_OF_ITER and other constants are exactly
-        the same as the prior run.
-
-        Args:
-            start (int): start index of perm
-            stop (int): end index of perm
-            max (int): the max number of requests to get form the perm
-
-        Returns:
-            (perm: np.array dtype=np.unint64, pos np.array dtype=np.uint64): the perm and pos
-        """
-        perm_file_name = self.get_perm_file_name(start, stop)
-        pos_file_name = self.get_pos_file_name(start, stop)
-
-        perm_file_exsits = os.path.isfile(perm_file_name)
-        pos_file_exsits = os.path.isfile(pos_file_name)
-
-        if self.overwrite or not perm_file_exsits or not pos_file_exsits:
-            perm = np.random.permutation(
-                np.arange(start=start, stop=stop, dtype=np.uint64)
-            )
-            pos = np.array([0], dtype=np.uint64)
-
-            np.savetxt(perm_file_name, perm)
-            np.savetxt(pos_file_name, pos)
-        else:
-            perm = np.loadtxt(perm_file_name, dtype=np.uint64)
-            pos = np.loadtxt(pos_file_name, dtype=np.uint64)
-
-        return perm, pos, pos_file_name
-
-    # def update_pos(self, pos: npt.ArrayLike):
-    #     pos_file_name = self.get_pos_file_name()
-    #     np.savetext(pos_file_name)
 
     def request_batch(self, id_ints: list[int]):
         """
@@ -269,7 +231,6 @@ class gems_runner:
                     ]
                 )
                 self.logger.debug(f"saved {submission.id}")
-                self.count += 1
                 self.time_ranges.notify_requested(int(submission.id, 36), True)
             else:
                 self.logger.error(
@@ -289,7 +250,6 @@ class gems_runner:
 
         while True:
             next_ids = self.time_ranges.next_ids(REQUEST_PER_CALL)
-            print("got ids!")
             with ProtectedBlock():
                 self.logger.debug(f"Requesting {','.join(map(to_b36, next_ids))}")
                 self.request_batch(next_ids)
@@ -297,12 +257,13 @@ class gems_runner:
     def close(self):
         """Closes all open files."""
         self.main_csv_f.close()
-        program_data = {"count": self.count}
-        json.dump(program_data, self.program_data_f)
-        self.program_data_f.close()
         self.missed_comments_file.close()
-        if self.perm is not None:
-            np.savetxt(os.path.join(self.output_dir, "perms.txt"), self.perm)
+
+        program_data = {"timestamp": self.timestamp}
+        with open(
+            os.path.join(self.run_dir, PROGRAM_DATA_FILE_NAME), "w"
+        ) as program_data_f:
+            json.dump(program_data, program_data_f)
 
 
 if __name__ == "__main__":
@@ -436,7 +397,6 @@ if __name__ == "__main__":
         client_id,
         reddit_secret,
         output_dir=output_dir,
-        log_file=log_file,
         log_level=log_level,
         praw_log_level=praw_log_level,
     )
