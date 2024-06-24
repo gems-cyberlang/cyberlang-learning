@@ -147,6 +147,8 @@ class BinBin(Generic[T], AbstractBin):
         """
         self._update_remaining()
 
+        # TODO actually prioritize bins that haven't gotten the minimum number of comments yet
+
         # If we have more than n bins, only need to look at the first n
         num_bins = min(n, len(self._remaining))
         front_bins = list(itertools.islice(self._remaining, num_bins))
