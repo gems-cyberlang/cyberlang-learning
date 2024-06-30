@@ -141,10 +141,10 @@ runner = gems_runner(
 
 
 def run_in_terminal():
-    total_needed = runner.time_ranges.needed()
+    total_needed = runner.time_ranges.needed
     with tqdm(total=total_needed) as pbar:
         while runner.run_step():
-            pbar.update(total_needed - runner.time_ranges.needed())
+            pbar.update(total_needed - runner.time_ranges.needed)
 
 
 try:

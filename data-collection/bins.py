@@ -46,6 +46,7 @@ class AbstractBin(ABC):
         requested in a time range.
         """
 
+    @property
     def needed(self) -> int:
         """How many comments we still need from this range"""
         return 0
@@ -146,8 +147,9 @@ class BinBin(Generic[T], AbstractBin):
     def unrequested(self) -> int:
         return sum(bin.unrequested for bin in self.bins)
 
+    @property
     def needed(self) -> int:
-        return sum(bin.needed() for bin in self.bins)
+        return sum(bin.needed for bin in self.bins)
 
     def find_bin(self, id: int) -> Optional[T]:
         """Find the bin that the given ID goes into (None if it doesn't go into any of the bins)"""
@@ -173,6 +175,7 @@ class BinBin(Generic[T], AbstractBin):
         Every time this is called, it will rotate through the remaining bins
         """
         self._update_remaining()
+        any_needy = self._any_needy()
 
         # TODO actually prioritize bins that haven't gotten the minimum number of comments yet
 
@@ -185,11 +188,17 @@ class BinBin(Generic[T], AbstractBin):
         # Number of IDs to request from each remaining bin
         num_ids = [1] * len(front_bins)
 
+        # If none of the bins have a minimum to meet, just look at how many IDs
+        # inside them haven't been requested yet
+        neededs = [
+            min(bin.needed, bin.unrequested) if any_needy else bin.unrequested
+            for bin in front_bins
+        ]
         while sum(num_ids) < n and any(
-            bin.unrequested > num_ids[i] for i, bin in enumerate(front_bins)
+            needed > num_ids[i] for i, needed in enumerate(neededs)
         ):
-            for i, bin in enumerate(front_bins):
-                if bin.unrequested > num_ids[i]:
+            for i, needed in enumerate(neededs):
+                if needed > num_ids[i]:
                     num_ids[i] += 1
                     if sum(num_ids) == n:
                         break
@@ -202,6 +211,14 @@ class BinBin(Generic[T], AbstractBin):
 
     def _update_remaining(self):
         self._remaining = deque(bin for bin in self._remaining if bin.unrequested > 0)
+        if self._any_needy():
+            # If any of the bins still need more, keep those
+            self._remaining = deque(bin for bin in self._remaining if bin.needed > 0)
+        # But if none of the bins have a minimum to meet, don't filter them all out
+
+    def _any_needy(self) -> bool:
+        # Do any of the bins have a minimum quota they haven't filled yet?
+        return any(bin.needed > 0 for bin in self._remaining)
 
 
 class TimeRange(BinBin):
@@ -239,8 +256,9 @@ class TimeRange(BinBin):
             ]
         )
 
+    @property
     def needed(self) -> int:
-        return max(0, self.min - self.requested)
+        return max(0, self.min - self.hits)
 
     @property
     def start_id(self):
@@ -249,6 +267,9 @@ class TimeRange(BinBin):
     @property
     def end_id(self):
         return self._end_id
+
+    def __repr__(self):
+        return f"TimeRange(start_date={self.start_date}, min={self.min}, hits={self.hits}, misses={self.misses})"
 
 
 U = TypeVar("U", bound=BinBin)

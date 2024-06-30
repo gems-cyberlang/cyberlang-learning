@@ -235,8 +235,9 @@ class gems_runner:
 
     def run_step(self) -> bool:
         # TODO figure out how to use tqdm with this
-        if self.time_ranges.needed() == 0:
+        if self.time_ranges.needed == 0:
             self.logger.info("Done! Got minimum number of comments for every time range")
+            self.logger.info(self.time_ranges.bins)
             return False
         next_ids = self.time_ranges.next_ids(REQUEST_PER_CALL)
         self.logger.debug(f"Requesting {','.join(map(to_b36, next_ids))}")

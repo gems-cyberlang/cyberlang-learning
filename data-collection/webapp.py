@@ -6,7 +6,6 @@ from runner import gems_runner
 
 
 def run_app(runner: gems_runner):
-    time.sleep(1)
     with st.empty():
         while runner.run_step():
             df = pd.DataFrame(
