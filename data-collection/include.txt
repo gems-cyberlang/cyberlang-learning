@@ -5,7 +5,9 @@ numpy==1.26.4
 praw==7.7.1
 prawcore==2.4.0
 python-dotenv==1.0.1
+PyYaml==6.0.1
 requests==2.31.0
+streamlit==1.36.0
 tqdm==4.66.2
 update-checker==0.18.0
 urllib3==2.2.1
