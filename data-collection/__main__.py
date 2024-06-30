@@ -136,14 +136,14 @@ runner = gems_runner(
 
 
 try:
-    # If the person running doesn't have Streamlit installed, just run in the terminal normally
     try:
         import streamlit as _
 
         from webapp import run_app
 
         run_app(runner)
-    except:
+    except ModuleNotFoundError:
+        # If Streamlit isn't installed, just run in the terminal normally
         total_needed = runner.time_ranges.needed()
         with tqdm(total=total_needed) as pbar:
             while runner.run_step():

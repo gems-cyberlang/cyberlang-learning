@@ -7,21 +7,36 @@ from typing import Generic, Optional, TypeVar
 
 SIZE_OF_ITERATION = 1000000
 
+
 class AbstractBin(ABC):
+    """A range of IDs"""
+
     @property
     @abstractmethod
     def start_id(self) -> int:
-        pass
+        """First ID in this range (inclusive)"""
 
     @property
     @abstractmethod
     def end_id(self) -> int:
-        pass
+        """Last ID in this range (exclusive)"""
 
+    @property
     @abstractmethod
-    def requested(self) -> int:
-        """How many IDs in this time range we've requested"""
+    def hits(self) -> int:
+        """How many IDs we requested and actually got"""
 
+    @property
+    @abstractmethod
+    def misses(self) -> int:
+        """How many IDs we requested that turned out to be deleted/inaccessible"""
+
+    @property
+    def requested(self) -> int:
+        """How many IDs in this ID range we've requested"""
+        return self.hits + self.misses
+
+    @property
     @abstractmethod
     def unrequested(self) -> int:
         """
@@ -70,31 +85,34 @@ class PermBin(AbstractBin):
         """
         self._start_id = start
         self._end_id = end
-        self.hits = 0
-        """Number of IDs that we requested and actually got"""
-        self.misses = 0
-        """Number of IDs that we requested but turned out to be inaccessible"""
+        self._hits = 0
+        self._misses = 0
 
-    def requested(self) -> int:
-        """How many comments have been requested in this bin so far"""
-        return self.hits + self.misses
+    @property
+    def hits(self) -> int:
+        return self._hits
 
+    @property
+    def misses(self) -> int:
+        return self._misses
+
+    @property
     def unrequested(self) -> int:
         total_available = self.end_id - self.start_id
-        return total_available - self.requested()
+        return total_available - self.requested
 
     def next_ids(self, n: int) -> list[int]:
         perm = np.random.default_rng(seed=[self.start_id, self.end_id]).permutation(
             np.arange(start=self.start_id, stop=self.end_id, dtype=np.uint64)
         )
-        return list(map(int, perm[self.requested() : self.requested() + n]))
+        return list(map(int, perm[self.requested : self.requested + n]))
 
     def notify_requested(self, id: int, hit: bool):
         assert id in self, f"{id} not in {self}"
         if hit:
-            self.hits += 1
+            self._hits += 1
         else:
-            self.misses += 1
+            self._misses += 1
 
     @property
     def start_id(self):
@@ -116,12 +134,18 @@ class BinBin(Generic[T], AbstractBin):
         self._remaining = deque(self.bins)
         self._update_remaining()
 
-    def requested(self) -> int:
-        return sum(bin.requested() for bin in self.bins)
+    @property
+    def hits(self) -> int:
+        return sum(bin.hits for bin in self.bins)
 
+    @property
+    def misses(self) -> int:
+        return sum(bin.misses for bin in self.bins)
+
+    @property
     def unrequested(self) -> int:
-        return sum(bin.unrequested() for bin in self.bins)
-    
+        return sum(bin.unrequested for bin in self.bins)
+
     def needed(self) -> int:
         return sum(bin.needed() for bin in self.bins)
 
@@ -162,10 +186,10 @@ class BinBin(Generic[T], AbstractBin):
         num_ids = [1] * len(front_bins)
 
         while sum(num_ids) < n and any(
-            bin.unrequested() > num_ids[i] for i, bin in enumerate(front_bins)
+            bin.unrequested > num_ids[i] for i, bin in enumerate(front_bins)
         ):
             for i, bin in enumerate(front_bins):
-                if bin.unrequested() > num_ids[i]:
+                if bin.unrequested > num_ids[i]:
                     num_ids[i] += 1
                     if sum(num_ids) == n:
                         break
@@ -177,7 +201,7 @@ class BinBin(Generic[T], AbstractBin):
         )
 
     def _update_remaining(self):
-        self._remaining = deque(bin for bin in self._remaining if bin.unrequested() > 0)
+        self._remaining = deque(bin for bin in self._remaining if bin.unrequested > 0)
 
 
 class TimeRange(BinBin):
@@ -216,7 +240,7 @@ class TimeRange(BinBin):
         )
 
     def needed(self) -> int:
-        return max(0, self.min - self.requested())
+        return max(0, self.min - self.requested)
 
     @property
     def start_id(self):

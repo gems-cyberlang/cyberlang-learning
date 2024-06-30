@@ -4,9 +4,9 @@ timeStart: 2020-01-01
 timeStep: 16 # 16 weeks = 4 months
 timeRanges:
   - start: k000000
-    min: 5
+    min: 500
   - start: ka00000
-    min: 10
+    min: 1000
   - start: kw00000
-    min: 4
+    min: 400
     end: l000000

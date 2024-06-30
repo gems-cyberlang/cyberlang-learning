@@ -9,6 +9,7 @@ import praw
 import praw.models
 import praw.exceptions
 import signal
+import threading
 import time
 
 from bins import BinBinBin, TimeRange
@@ -238,8 +239,12 @@ class gems_runner:
             self.logger.info("Done! Got minimum number of comments for every time range")
             return False
         next_ids = self.time_ranges.next_ids(REQUEST_PER_CALL)
-        with ProtectedBlock():
-            self.logger.debug(f"Requesting {','.join(map(to_b36, next_ids))}")
+        self.logger.debug(f"Requesting {','.join(map(to_b36, next_ids))}")
+        # todo figure out how to protect that block when running use Streamlit
+        if threading.current_thread() is threading.main_thread():
+            with ProtectedBlock():
+                self.request_batch(next_ids)
+        else:
             self.request_batch(next_ids)
         return True
 
