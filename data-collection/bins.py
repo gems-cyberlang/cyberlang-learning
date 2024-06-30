@@ -188,12 +188,17 @@ class BinBin(Generic[T], AbstractBin):
         # Number of IDs to request from each remaining bin
         num_ids = [1] * len(front_bins)
 
-        # If none of the bins have a minimum to meet, just look at how many IDs
-        # inside them haven't been requested yet
-        neededs = [
-            min(bin.needed, bin.unrequested) if any_needy else bin.unrequested
-            for bin in front_bins
-        ]
+        unrequesteds = [bin.unrequested for bin in front_bins]
+        if any_needy:
+            neededs = [
+                min(bin.needed, unrequested)
+                for bin, unrequested in zip(front_bins, unrequesteds)
+            ]
+        else:
+            # If none of the bins have a minimum to meet, just look at how many IDs
+            # inside them haven't been requested yet
+            neededs = list(unrequesteds)
+
         while sum(num_ids) < n and any(
             needed > num_ids[i] for i, needed in enumerate(neededs)
         ):
@@ -202,6 +207,20 @@ class BinBin(Generic[T], AbstractBin):
                     num_ids[i] += 1
                     if sum(num_ids) == n:
                         break
+
+        # If we can still request more, go up to bin.unrequested
+        if sum(num_ids) < n and any(
+            needed < unrequested for needed, unrequested in zip(neededs, unrequesteds)
+        ):
+            # todo reduce code duplication
+            while sum(num_ids) < n and any(
+                unrequested > num_ids[i] for i, unrequested in enumerate(unrequesteds)
+            ):
+                for i, unrequested in enumerate(unrequesteds):
+                    if unrequested > num_ids[i]:
+                        num_ids[i] += 1
+                        if sum(num_ids) == n:
+                            break
 
         return list(
             itertools.chain.from_iterable(

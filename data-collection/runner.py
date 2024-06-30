@@ -218,7 +218,6 @@ class gems_runner:
                         submission.subreddit_id,
                     ]
                 )
-                self.logger.debug(f"saved {submission.id}")
                 self.time_ranges.notify_requested(int(submission.id, 36), True)
             else:
                 self.logger.error(
@@ -240,7 +239,7 @@ class gems_runner:
             self.logger.info(self.time_ranges.bins)
             return False
         next_ids = self.time_ranges.next_ids(REQUEST_PER_CALL)
-        self.logger.debug(f"Requesting {','.join(map(to_b36, next_ids))}")
+        self.logger.debug(f"Requesting {len(next_ids)}: {','.join(map(to_b36, next_ids))}")
         # todo figure out how to protect that block when running use Streamlit
         if threading.current_thread() is threading.main_thread():
             with ProtectedBlock():
