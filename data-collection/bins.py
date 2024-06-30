@@ -121,6 +121,9 @@ class BinBin(Generic[T], AbstractBin):
 
     def unrequested(self) -> int:
         return sum(bin.unrequested() for bin in self.bins)
+    
+    def needed(self) -> int:
+        return sum(bin.needed() for bin in self.bins)
 
     def find_bin(self, id: int) -> Optional[T]:
         """Find the bin that the given ID goes into (None if it doesn't go into any of the bins)"""

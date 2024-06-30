@@ -10,7 +10,6 @@ import praw.models
 import praw.exceptions
 import signal
 import time
-import tqdm
 
 from bins import BinBinBin, TimeRange
 
@@ -233,14 +232,16 @@ class gems_runner:
 
         self.logger.debug(f"Completed group {i} of size {REQUEST_PER_CALL}")
 
-    def run(self):
+    def run_step(self) -> bool:
         # TODO figure out how to use tqdm with this
-
-        while True:
-            next_ids = self.time_ranges.next_ids(REQUEST_PER_CALL)
-            with ProtectedBlock():
-                self.logger.debug(f"Requesting {','.join(map(to_b36, next_ids))}")
-                self.request_batch(next_ids)
+        if self.time_ranges.needed() == 0:
+            self.logger.info("Done! Got minimum number of comments for every time range")
+            return False
+        next_ids = self.time_ranges.next_ids(REQUEST_PER_CALL)
+        with ProtectedBlock():
+            self.logger.debug(f"Requesting {','.join(map(to_b36, next_ids))}")
+            self.request_batch(next_ids)
+        return True
 
     def close(self):
         """Closes all open files."""

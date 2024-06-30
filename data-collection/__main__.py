@@ -4,6 +4,7 @@ import os
 import logging
 import argparse
 import sys
+from tqdm import tqdm
 import yaml
 
 from bins import TimeRange
@@ -133,7 +134,19 @@ runner = gems_runner(
     praw_log_level=praw_log_level,
 )
 
+
 try:
-    runner.run()
+    # If the person running doesn't have Streamlit installed, just run in the terminal normally
+    try:
+        import streamlit as _
+
+        from webapp import run_app
+
+        run_app(runner)
+    except:
+        total_needed = runner.time_ranges.needed()
+        with tqdm(total=total_needed) as pbar:
+            while runner.run_step():
+                pbar.update(total_needed -runner.time_ranges.needed())
 finally:
     runner.close()
