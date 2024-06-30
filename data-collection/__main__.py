@@ -57,6 +57,11 @@ parser.add_argument(
     choices=["info", "debug", "warn", "error"],
     default="warn",
 )
+parser.add_argument(
+    "--terminal",
+    help="Run only in the terminal, instead of showing the web dashboard",
+    action="store_true",
+)
 
 args = parser.parse_args()
 
@@ -135,18 +140,26 @@ runner = gems_runner(
 )
 
 
+def run_in_terminal():
+    total_needed = runner.time_ranges.needed()
+    with tqdm(total=total_needed) as pbar:
+        while runner.run_step():
+            pbar.update(total_needed - runner.time_ranges.needed())
+
+
 try:
-    try:
-        import streamlit as _
+    if args.terminal:
+        run_in_terminal()
+    else:
+        # todo automatically detect if being run by streamlit instead
+        try:
+            import streamlit as _
 
-        from webapp import run_app
+            from webapp import run_app
 
-        run_app(runner)
-    except ModuleNotFoundError:
-        # If Streamlit isn't installed, just run in the terminal normally
-        total_needed = runner.time_ranges.needed()
-        with tqdm(total=total_needed) as pbar:
-            while runner.run_step():
-                pbar.update(total_needed -runner.time_ranges.needed())
+            run_app(runner)
+        except ModuleNotFoundError:
+            # If Streamlit isn't installed, just run in the terminal normally
+            run_in_terminal()
 finally:
     runner.close()
