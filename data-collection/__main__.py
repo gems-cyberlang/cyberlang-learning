@@ -4,7 +4,7 @@ import os
 import logging
 import argparse
 import sys
-from tqdm import tqdm
+from alive_progress import alive_bar
 import yaml
 
 from bins import TimeRange
@@ -139,27 +139,11 @@ runner = gems_runner(
     praw_log_level=praw_log_level,
 )
 
-
-def run_in_terminal():
-    total_needed = runner.time_ranges.needed
-    with tqdm(total=total_needed) as pbar:
-        while runner.run_step():
-            pbar.update(total_needed - runner.time_ranges.needed)
-
-
 try:
-    if args.terminal:
-        run_in_terminal()
-    else:
-        # todo automatically detect if being run by streamlit instead
-        try:
-            import streamlit as _
-
-            from webapp import run_app
-
-            run_app(runner)
-        except ModuleNotFoundError:
-            # If Streamlit isn't installed, just run in the terminal normally
-            run_in_terminal()
+    total_needed = runner.time_ranges.needed
+    with alive_bar(total=total_needed, manual=True) as pbar:
+        while runner.run_step():
+            pbar(1 - runner.time_ranges.needed / total_needed)
+    print("Done!")
 finally:
     runner.close()
