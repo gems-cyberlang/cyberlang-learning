@@ -144,5 +144,6 @@ try:
     with tqdm(total=total_needed) as pbar:
         while runner.run_step():
             pbar.update(total_needed - runner.time_ranges.needed)
+    print("Done!")
 finally:
     runner.close()

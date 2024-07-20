@@ -149,15 +149,16 @@ class gems_runner:
         self.sel.register(conn, selectors.EVENT_READ, True)
 
     def read(self, conn: socket.socket):
-        data = conn.recv(1)
-        if data:
-            self.logger.warn(
-                f"Got {data!r} from {conn}, I don't know what to do with it"
-            )
-        else:
-            self.logger.info(f"closing {conn}")
-            self.sel.unregister(conn)
-            conn.close()
+        try:
+            data = conn.recv(1)
+        except:
+            self.remove_conn(conn)
+            return
+        if not data:
+            self.remove_conn(conn)
+            return
+
+        self.logger.warn(f"Got {data!r} from {conn}, I don't know what to do with it")
 
     def create_err(self, err_msg: str, logger: logging.Logger):
         """logs error and kills program
@@ -284,12 +285,15 @@ class gems_runner:
             for bin in self.time_ranges.bins
         ]
         msg = header + b"\n" + b"\n".join(rows)
-        for fd in self.sel.get_map():
+        for fd in list(self.sel.get_map()):
             key = self.sel.get_key(fd)
-            if key.data: # Is a client socket, not the server socket
+            if key.data:  # Is a client socket, not the server socket
                 conn: socket.socket = key.fileobj
-                conn.setblocking(False)
-                conn.send(msg)
+                try:
+                    conn.setblocking(False)
+                    conn.send(msg)
+                except:
+                    self.remove_conn(conn)
 
         events = self.sel.select(0)
         for key, _mask in events:
@@ -299,6 +303,11 @@ class gems_runner:
             else:
                 self.accept(key.fileobj)
         return True
+
+    def remove_conn(self, conn: socket.socket):
+        self.logger.info(f"Closing {conn}")
+        self.sel.unregister(conn)
+        conn.close()
 
     def close(self):
         """Closes all open files."""
@@ -310,3 +319,7 @@ class gems_runner:
             os.path.join(self.run_dir, PROGRAM_DATA_FILE_NAME), "w"
         ) as program_data_f:
             json.dump(program_data, program_data_f)
+
+        for fd in list(self.sel.get_map()):
+            key = self.sel.get_key(fd)
+            self.remove_conn(key.fileobj)
