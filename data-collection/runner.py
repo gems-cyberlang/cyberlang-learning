@@ -8,8 +8,9 @@ import pandas as pd
 import praw
 import praw.models
 import praw.exceptions
+import selectors
 import signal
-import threading
+import socket
 import time
 
 from bins import BinBinBin, TimeRange
@@ -23,6 +24,9 @@ COMMENTS_FILE_NAME = "comments.csv"
 MISSED_FILE_NAME = "missed-ids.txt"
 LOG_FILE_NAME = "run.log"
 PROGRAM_DATA_FILE_NAME = "program_data.json"
+
+PORT = 1234
+"""Port on which the server runs"""
 
 
 def get_formatted_time():
@@ -74,6 +78,7 @@ class gems_runner:
         self.reddit_secret = reddit_secret
         self.time_ranges = BinBinBin(time_ranges)
         self.timestamp = get_formatted_time()
+        self.sel = selectors.DefaultSelector()
 
         # Open files and directores loading data from there
         if not os.path.isdir(output_dir):
@@ -128,7 +133,31 @@ class gems_runner:
             user_agent=USER_AGENT,
         )
 
+        server_sock = socket.socket()
+        server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server_sock.bind(("localhost", PORT))
+        server_sock.listen(100)
+        server_sock.setblocking(False)
+        self.sel.register(server_sock, selectors.EVENT_READ, False)
+
         self.logger.info("init complete")
+
+    def accept(self, sock: socket.socket):
+        conn, addr = sock.accept()
+        self.logger.info(f"Accepted connection from {addr}")
+        conn.setblocking(False)
+        self.sel.register(conn, selectors.EVENT_READ, True)
+
+    def read(self, conn: socket.socket):
+        data = conn.recv(1)
+        if data:
+            self.logger.warn(
+                f"Got {data!r} from {conn}, I don't know what to do with it"
+            )
+        else:
+            self.logger.info(f"closing {conn}")
+            self.sel.unregister(conn)
+            conn.close()
 
     def create_err(self, err_msg: str, logger: logging.Logger):
         """logs error and kills program
@@ -235,17 +264,40 @@ class gems_runner:
     def run_step(self) -> bool:
         # TODO figure out how to use tqdm with this
         if self.time_ranges.needed == 0:
-            self.logger.info("Done! Got minimum number of comments for every time range")
+            self.logger.info(
+                "Done! Got minimum number of comments for every time range"
+            )
             self.logger.info(self.time_ranges.bins)
             return False
         next_ids = self.time_ranges.next_ids(REQUEST_PER_CALL)
-        self.logger.debug(f"Requesting {len(next_ids)}: {','.join(map(to_b36, next_ids))}")
-        # todo figure out how to protect that block when running use Streamlit
-        if threading.current_thread() is threading.main_thread():
-            with ProtectedBlock():
-                self.request_batch(next_ids)
-        else:
+        self.logger.debug(
+            f"Requesting {len(next_ids)}: {','.join(map(to_b36, next_ids))}"
+        )
+
+        with ProtectedBlock():
             self.request_batch(next_ids)
+
+        # Send updates to dashboard client(s)
+        header = b"Date,Min,Hits,Misses"
+        rows = [
+            f"{bin.start_date},{bin.min},{bin.hits},{bin.misses}".encode()
+            for bin in self.time_ranges.bins
+        ]
+        msg = header + b"\n" + b"\n".join(rows)
+        for fd in self.sel.get_map():
+            key = self.sel.get_key(fd)
+            if key.data: # Is a client socket, not the server socket
+                conn: socket.socket = key.fileobj
+                conn.setblocking(False)
+                conn.send(msg)
+
+        events = self.sel.select(0)
+        for key, _mask in events:
+            is_client = key.data
+            if is_client:
+                self.read(key.fileobj)
+            else:
+                self.accept(key.fileobj)
         return True
 
     def close(self):
