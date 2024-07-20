@@ -4,7 +4,7 @@ import os
 import logging
 import argparse
 import sys
-from tqdm import tqdm
+from alive_progress import alive_bar
 import yaml
 
 from bins import TimeRange
@@ -141,9 +141,9 @@ runner = gems_runner(
 
 try:
     total_needed = runner.time_ranges.needed
-    with tqdm(total=total_needed) as pbar:
+    with alive_bar(total=total_needed, manual=True) as pbar:
         while runner.run_step():
-            pbar.update(total_needed - runner.time_ranges.needed)
+            pbar(1 - runner.time_ranges.needed / total_needed)
     print("Done!")
 finally:
     runner.close()
