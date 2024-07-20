@@ -25,9 +25,6 @@ MISSED_FILE_NAME = "missed-ids.txt"
 LOG_FILE_NAME = "run.log"
 PROGRAM_DATA_FILE_NAME = "program_data.json"
 
-PORT = 1234
-"""Port on which the server runs"""
-
 
 def get_formatted_time():
     return time.strftime("%Y-%m-%d-%H-%M-%S")
@@ -72,6 +69,7 @@ class gems_runner:
         output_dir: str,
         log_level: int,
         praw_log_level: int,
+        port: int,
     ) -> None:
         self.output_dir = output_dir
         self.client_id = client_id
@@ -135,7 +133,7 @@ class gems_runner:
 
         server_sock = socket.socket()
         server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        server_sock.bind(("localhost", PORT))
+        server_sock.bind(("localhost", port))
         server_sock.listen(100)
         server_sock.setblocking(False)
         self.sel.register(server_sock, selectors.EVENT_READ, False)

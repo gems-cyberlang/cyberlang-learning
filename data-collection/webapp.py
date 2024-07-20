@@ -1,3 +1,4 @@
+import argparse
 from io import StringIO
 import logging
 import pandas as pd
@@ -6,6 +7,18 @@ import socket
 import streamlit as st
 
 logger = logging.Logger("dashboard")
+
+parser = argparse.ArgumentParser(
+    description="The Gems Reddit Data collector 9000 turdo"
+)
+parser.add_argument(
+    "--port",
+    "-p",
+    help="Port that the server runs on",
+    default=1234,
+    type=int,
+)
+args = parser.parse_args()
 
 sel = selectors.DefaultSelector()
 
@@ -32,7 +45,7 @@ def draw_graph(csv: str):
 
 
 client_sock = socket.socket()
-client_sock.connect(("", 1234))
+client_sock.connect(("", args.port))
 client_sock.setblocking(False)
 sel.register(client_sock, selectors.EVENT_READ, read)
 

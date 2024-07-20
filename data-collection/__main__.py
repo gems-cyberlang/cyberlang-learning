@@ -52,15 +52,17 @@ parser.add_argument(
 )
 parser.add_argument(
     "--praw-log",
-    "-p",
+    "-P",
     help="Log level for PRAW output",
     choices=["info", "debug", "warn", "error"],
     default="warn",
 )
 parser.add_argument(
-    "--terminal",
-    help="Run only in the terminal, instead of showing the web dashboard",
-    action="store_true",
+    "--port",
+    "-p",
+    help="Port for the server to listen on",
+    default=1234,
+    type=int,
 )
 
 args = parser.parse_args()
@@ -137,6 +139,7 @@ runner = gems_runner(
     output_dir=output_dir,
     log_level=log_level,
     praw_log_level=praw_log_level,
+    port=args.port,
 )
 
 try:
