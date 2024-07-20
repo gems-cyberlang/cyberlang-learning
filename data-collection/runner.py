@@ -143,12 +143,15 @@ class gems_runner:
         self.logger.info("init complete")
 
     def accept(self, sock: socket.socket):
+        """Accept a new connection"""
         conn, addr = sock.accept()
         self.logger.info(f"Accepted connection from {addr}")
         conn.setblocking(False)
         self.sel.register(conn, selectors.EVENT_READ, True)
 
     def read(self, conn: socket.socket):
+        """Receive a message from the dashboard. We're not actually using this yet,
+        but we might want to allow stopping the server from the dashboard at some point"""
         try:
             data = conn.recv(1)
         except:
@@ -299,6 +302,8 @@ class gems_runner:
         for key, _mask in events:
             is_client = key.data
             if is_client:
+                # This isn't necessary yet, but at some point, we might want to
+                # receive messages from the dashboard
                 self.read(key.fileobj)
             else:
                 self.accept(key.fileobj)
