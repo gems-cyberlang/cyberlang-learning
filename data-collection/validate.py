@@ -63,6 +63,10 @@ def _check(
     return decorator
 
 
+def run_check(f: Callable, *args, **kwargs) -> list[str]:
+    return _checks[f](*args, **kwargs)
+
+
 @_check(happy_msg="No missing runs", error_msg=lambda runs: f"Missing runs: {runs}")
 def missing_runs(run_nums: list[int]):
     return [i for i in range(max(run_nums)) if i not in run_nums]
@@ -115,11 +119,11 @@ def _validate_helper(df: pd.DataFrame, misses: list[int], issues: list[str]):
     in when we're running this as a script
     """
 
-    issues.extend(_checks[duplicate_comments](df))
+    issues.extend(run_check(duplicate_comments, df))
 
-    issues.extend(_checks[duplicate_misses](misses))
+    issues.extend(run_check(duplicate_misses, misses))
 
-    issues.extend(_checks[find_out_of_order_ids](df))
+    issues.extend(run_check(find_out_of_order_ids, df))
 
     if len(issues) > 0:
         print("Found issues:")
@@ -140,7 +144,7 @@ if __name__ == "__main__":
 
     issues = []
 
-    issues.extend(_checks[missing_runs](run_nums))
+    issues.extend(run_check(missing_runs, run_nums))
 
     misses = []
     comment_dfs = []

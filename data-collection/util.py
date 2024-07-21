@@ -1,4 +1,5 @@
 import configparser
+from datetime import datetime
 from glob import glob
 import os
 import pandas as pd
@@ -45,7 +46,9 @@ def load_comments(*paths: str) -> pd.DataFrame:
         dfs.append(pd.read_csv(path))
 
     df = pd.concat(dfs, axis=0, ignore_index=True)
+    df[BODY] = df[BODY].apply(str)
     df[ID] = df[ID].apply(lambda id: int(str(id), 36))
+    df[TIME] = df[TIME].map(lambda ts: datetime.fromtimestamp(ts))
     df = sort_comments(df)
     return df
 
@@ -54,18 +57,21 @@ def sort_comments(df: pd.DataFrame) -> pd.DataFrame:
     return df.sort_values([ID]).reset_index(drop=True)
 
 
-def load_misses(path: str) -> list[int]:
+def load_misses(*paths: str) -> pd.Series:
     """
-    Load a file with a list of missed IDs
+    Load files with list of missed IDs
 
-    If the given path is a file, load that file. If it's a folder, load "{path}/missed-ids.txt"
+    For each path, if it's a file, load that file. If it's a folder, load "folder/missed-ids.txt"
     """
-    if os.path.isdir(path):
-        path = os.path.join(path, MISSED_FILE_NAME)
-    if not os.path.exists(path):
-        raise FileNotFoundError(path)
-    with open(path, "r") as f:
-        return [int(id, 36) for id in f.readlines()]
+    misses = []
+    for path in paths:
+        if os.path.isdir(path):
+            path = os.path.join(path, MISSED_FILE_NAME)
+        if not os.path.exists(path):
+            raise FileNotFoundError(path)
+        with open(path, "r") as f:
+            misses.extend(int(id, 36) for id in f.readlines())
+    return pd.Series(misses)
 
 
 def init_reddit() -> praw.Reddit:
