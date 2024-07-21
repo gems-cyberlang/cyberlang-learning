@@ -11,7 +11,8 @@ from glob import glob
 import numpy as np
 import os
 import pandas as pd
-from typing import Never
+
+import util
 
 
 issues = []
@@ -66,11 +67,8 @@ def check_ids_sequential(df: pd.DataFrame):
 
 
 if __name__ == "__main__":
-    curr_dir = os.path.dirname(__file__)
-
-    out_dir = os.path.join(curr_dir, "out")
-    run_dir_names = glob("run_*", root_dir=out_dir)
-    run_nums = sorted(int(name.split("_", maxsplit=1)[1]) for name in run_dir_names)
+    runs = util.get_runs()
+    run_nums = sorted(list(runs.keys()))
 
     if len(run_nums) == 0:
         print("No runs")
@@ -84,26 +82,22 @@ if __name__ == "__main__":
     misses = []
     comment_dfs = []
 
-    for run_num in run_nums:
-        comments_file = os.path.join(out_dir, f"run_{run_num}/comments.csv")
-        if os.path.exists(comments_file):
-            comment_dfs.append(pd.read_csv(comments_file))
-        else:
-            msg = f"{comments_file} does not exist"
+    for run_dir in runs.values():
+        try:
+            comment_dfs.append(util.load_comments(run_dir))
+        except FileNotFoundError:
+            msg = f"{run_dir} has no comments file"
             print(f"❌ {msg}")
             add_issue(msg)
 
-        misses_file = os.path.join(out_dir, f"run_{run_num}/missed-ids.txt")
-        if os.path.exists(misses_file):
-            with open(misses_file, "r") as f:
-                misses.extend(int(id, 36) for id in f.readlines())
-        else:
-            msg = f"{misses_file} does not exist"
+        try:
+            misses.extend(util.load_misses(run_dir))
+        except FileNotFoundError:
+            msg = f"{run_dir} has no missed IDs file"
             print(f"❌ {msg}")
             add_issue(msg)
 
     df = pd.concat(comment_dfs, axis=0, ignore_index=True)
-    df["comment_id"] = df["comment_id"].apply(lambda id: int(id, 36))
     df = df.sort_values(["comment_id"]).reset_index(drop=True)
 
     misses.sort()

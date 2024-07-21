@@ -1,10 +1,8 @@
 import csv
-from glob import glob
 import json
 import logging
 import numpy as np
 import os
-import pandas as pd
 import praw
 import praw.models
 import praw.exceptions
@@ -14,14 +12,14 @@ import socket
 import time
 
 from bins import BinBinBin, TimeRange
+import util
+from util import COMMENTS_FILE_NAME, MISSED_FILE_NAME
 
 USER_AGENT = "GEMSTONE CYBERLAND RESEARCH"
 ROWS = ["time", "comment_id", "body", "permalink", "score", "subreddit", "subreddit_id"]
 REQUEST_PER_CALL = 100
 LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
-COMMENTS_FILE_NAME = "comments.csv"
-MISSED_FILE_NAME = "missed-ids.txt"
 LOG_FILE_NAME = "run.log"
 PROGRAM_DATA_FILE_NAME = "program_data.json"
 
@@ -83,26 +81,23 @@ class gems_runner:
             os.mkdir(output_dir)  # make output directory if it dose not exits
 
         # Load data on previous runs
-        prev_run_dirs = glob("run_*", root_dir=self.output_dir)
-        prev_run_nums = sorted(
-            int(name.split("_", maxsplit=1)[1]) for name in prev_run_dirs
-        )
+        prev_runs = util.get_runs()
+        prev_run_nums = sorted(list(prev_runs.keys()))
         if len(prev_run_nums) == 0:
             # This is the first run
             curr_run = 0
         else:
             assert len(prev_run_nums) == max(prev_run_nums) + 1, "Missing run detected"
             curr_run = len(prev_run_nums)
-            for run_num in prev_run_nums:
-                run_path = os.path.join(output_dir, f"run_{run_num}")
-                comments = pd.read_csv(os.path.join(run_path, COMMENTS_FILE_NAME))
+            for run_path in prev_runs.values():
+                comments = util.load_comments(run_path)
                 comments["comment_id"].apply(
-                    lambda id: self.time_ranges.notify_requested(int(id, 36), True)
+                    lambda id: self.time_ranges.notify_requested(id, True)
                 )
                 del comments
-                with open(os.path.join(run_path, MISSED_FILE_NAME), "r") as misses_file:
-                    for id in misses_file.readlines():
-                        self.time_ranges.notify_requested(int(id, 36), False)
+                misses = util.load_misses(run_path)
+                for id in misses:
+                    self.time_ranges.notify_requested(id, False)
 
         self.run_dir = os.path.join(output_dir, f"run_{curr_run}")
         """Where all the data for this run goes"""
@@ -149,7 +144,8 @@ class gems_runner:
 
     def read(self, conn: socket.socket):
         """Receive a message from the dashboard. We're not actually using this yet,
-        but we might want to allow stopping the server from the dashboard at some point"""
+        but we might want to allow stopping the server from the dashboard at some point
+        """
         try:
             data = conn.recv(1)
         except:
@@ -289,7 +285,7 @@ class gems_runner:
         for fd in list(self.sel.get_map()):
             key = self.sel.get_key(fd)
             if key.data:  # Is a client socket, not the server socket
-                conn: socket.socket = key.fileobj
+                conn: socket.socket = key.fileobj  # type: ignore
                 try:
                     conn.setblocking(False)
                     conn.send(msg)
@@ -302,9 +298,9 @@ class gems_runner:
             if is_client:
                 # This isn't necessary yet, but at some point, we might want to
                 # receive messages from the dashboard
-                self.read(key.fileobj)
+                self.read(key.fileobj)  # type: ignore
             else:
-                self.accept(key.fileobj)
+                self.accept(key.fileobj)  # type: ignore
         return True
 
     def remove_conn(self, conn: socket.socket):
@@ -325,4 +321,4 @@ class gems_runner:
 
         for fd in list(self.sel.get_map()):
             key = self.sel.get_key(fd)
-            self.remove_conn(key.fileobj)
+            self.remove_conn(key.fileobj)  # type: ignore
