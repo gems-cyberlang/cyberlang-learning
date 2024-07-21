@@ -11,6 +11,9 @@ from typing import Any, Optional
 COMMENTS_FILE_NAME = "comments.csv"
 MISSED_FILE_NAME = "missed-ids.txt"
 
+AUTOMOD_ID = "6l4z3"
+"""ID of automod user (base 36, not int)"""
+
 _curr_dir = os.path.dirname(__file__)
 
 out_dir = os.path.join(_curr_dir, "out")
@@ -26,20 +29,24 @@ def get_runs() -> dict[int, str]:
     }
 
 
-def load_comments(path: str) -> pd.DataFrame:
+def load_comments(*paths: str) -> pd.DataFrame:
     """
-    Load a CSV with comments
+    Load multiple CSVs with comment data into a single dataframe
 
-    If the given path is a file, load that file. If it's a folder, load "{path}/comments.csv"
+    For each path, if it's a file, load that file. If it's a folder, load "folder/comments.csv"
     """
-    if os.path.isdir(path):
-        path = os.path.join(path, COMMENTS_FILE_NAME)
-    if not os.path.exists(path):
-        raise FileNotFoundError(path)
+    dfs = []
+    for path in paths:
+        if os.path.isdir(path):
+            path = os.path.join(path, COMMENTS_FILE_NAME)
+        if not os.path.exists(path):
+            raise FileNotFoundError(path)
 
-    df = pd.read_csv(path)
-    df["comment_id"] = df["comment_id"].apply(lambda id: int(id, 36))
-    df = df.sort_values(["comment_id"]).reset_index(drop=True)
+        dfs.append(pd.read_csv(path))
+
+    df = pd.concat(dfs, axis=0, ignore_index=True)
+    df[ID] = df[ID].apply(lambda id: int(str(id), 36))
+    df = df.sort_values([ID]).reset_index(drop=True)
     return df
 
 
@@ -55,6 +62,7 @@ def load_misses(path: str) -> list[int]:
         raise FileNotFoundError(path)
     with open(path, "r") as f:
         return [int(id, 36) for id in f.readlines()]
+
 
 def init_reddit() -> praw.Reddit:
     # Copied from CommentCollector in main.py made by Oliver
@@ -115,23 +123,47 @@ def search(
 
 
 def multiline_to_csv(s: str) -> str:
-    """Make a multiline string appropriate for CSVs"""
-    return s.replace("\n", " ").replace("\r", " ")
-
-
-COMMENT_COLS = ["name", "subreddit", "time", "body"]
-
-
-def comment_relevant_fields(comment: praw.models.Comment):
     """
-    Extract the relevant fields of a comment, to be saved in a CSV
+    Make a multiline string appropriate for CSVs
+
+    Replace newlines with "\\n". Existing literal "\\n"s are escaped with an extra slash
     """
-    return [
-        comment.name.removeprefix("t1_"),
-        comment.subreddit_name_prefixed.removeprefix("r/"),
-        int(comment.created_utc),
-        multiline_to_csv(comment.body),
-    ]
+    return (
+        s.replace(r"\n", r"\\n")
+        .replace("\r\n", r"\n")
+        .replace("\n", r"\n")
+        .replace("\r", r"\n")
+    )
+
+
+# Column names
+ID = "id"
+"""Column for comment ID"""
+TIME = "time"
+SR_NAME = "sr_name"
+"""Column for subreddit name ('r/foo')"""
+AUTHOR_ID = "author_id"
+"""Column for the ID of the author of the comment (e.g. abcdef)"""
+PARENT_FULLNAME = "parent_fullname"
+"""Column for the fullname of the parent of the comment (e.g. t3_abcdef)"""
+POST_ID = "post_id"
+"""Column for the post the comment was submitted to"""
+UPVOTES = "upvotes"
+"""Column for number of upvotes"""
+DOWNVOTES = "downvotes"
+"""Column for number of downvotes"""
+BODY = "body"
+COMMENT_COLS = [
+    ID,
+    TIME,
+    SR_NAME,
+    AUTHOR_ID,
+    PARENT_FULLNAME,
+    POST_ID,
+    UPVOTES,
+    DOWNVOTES,
+    BODY,
+]
 
 
 POST_COLS = ["id", "time", "subreddit", "author", "title", "body", "num_comments"]
@@ -156,4 +188,3 @@ def post_relevant_fields(post: praw.models.Submission):
         multiline_to_csv(post.selftext),
         post.num_comments,
     ]
-

@@ -105,3 +105,29 @@ response back, it makes a CSV string and sends it to the dashboard. Each row of 
 CSV corresponds to the data collected for a particular time range so far. The columns
 are the start date of the time range, the minimum number of comments needed from that
 range, the number of hits so far, and the number of misses so far.
+
+## Collected fields
+
+Example query: https://www.reddit.com/comments/1e8h7ar.json
+
+Fields currently being collected (for comments):
+- id
+- created_utc
+- subreddit: Subreddit name
+- author_id
+- parent_id
+- link_id: Post on which comment was made
+- ups: upvotes
+- downs: downvotes
+- body: Body as Markdown
+
+Possibly interesting fields:
+- depth: How deep in the comment tree a comment is
+- body_html
+- gilded: int
+- gildings: object?
+- distinguished: ???
+- total_awards_received
+- collapsed: boolean
+- likes: What even is this?
+- banned_at_utc, banned_by: Might want to remove comments by banned users?

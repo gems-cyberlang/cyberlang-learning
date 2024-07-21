@@ -32,9 +32,10 @@ def read(conn: socket.socket):
         logger.error(f"Closing {conn} (reason: got empty message)")
         sel.unregister(conn)
         conn.close()
-        raise Exception("Done")
+        logger.info("Done")
+        exit()
 
-    logger.warning(f"Got {data!r}")
+    logger.debug(f"Got {data!r}")
     draw_graph(data.decode())
 
 
@@ -51,8 +52,6 @@ sel.register(client_sock, selectors.EVENT_READ, read)
 
 while True:
     events = sel.select()
-    print(events)
     for key, _mask in events:
-        print(key)
         callback = key.data
         callback(key.fileobj)

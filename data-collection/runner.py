@@ -13,10 +13,9 @@ import time
 
 from bins import BinBinBin, TimeRange
 import util
-from util import COMMENTS_FILE_NAME, MISSED_FILE_NAME
+from util import AUTHOR_ID, AUTOMOD_ID, COMMENT_COLS, COMMENTS_FILE_NAME, MISSED_FILE_NAME
 
 USER_AGENT = "GEMSTONE CYBERLAND RESEARCH"
-ROWS = ["time", "comment_id", "body", "permalink", "score", "subreddit", "subreddit_id"]
 REQUEST_PER_CALL = 100
 LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
@@ -113,7 +112,7 @@ class gems_runner:
 
         self.main_csv_f = open(comments_path, "w")
         self.main_csv = csv.writer(self.main_csv_f)
-        self.main_csv.writerow(ROWS)
+        self.main_csv.writerow(COMMENT_COLS)
 
         missed_path = os.path.join(self.run_dir, MISSED_FILE_NAME)
         self.missed_comments_file = open(missed_path, "w")
@@ -220,7 +219,11 @@ class gems_runner:
         ids = [to_b36(int(id)) for id in id_ints]
 
         try:
-            ret = self.reddit.info(fullnames=[f"t1_{id}" for id in ids])
+            ret = self.reddit.request(
+                method="GET",
+                path="api/info/",
+                params={"id": ",".join("t1_" + id for id in ids)},
+            )
         except praw.exceptions.PRAWException as e:
             self.logger.error(f"Praw error: {e}")
             self.logger.error(
@@ -228,31 +231,54 @@ class gems_runner:
             )
             return
 
-        misses = set(ids)
-        for submission in ret:
-            if isinstance(submission, praw.models.Comment):
-                misses.remove(submission.id)
-                self.main_csv.writerow(
-                    [
-                        int(submission.created_utc),
-                        submission.id,
-                        str(submission.body)
-                        .replace("\r\n", " ")
-                        .replace("\r", " ")
-                        .replace("\n", " "),
-                        submission.permalink,
-                        submission.score,
-                        submission.subreddit_id,
-                    ]
-                )
-                self.time_ranges.notify_requested(int(submission.id, 36), True)
-            else:
-                self.logger.error(
-                    f"{submission.id} was not a comment it had type {type(submission)}"
-                )
+        comments = ret["data"]["children"]
 
+        misses = set(id_ints)
+        rows = []
+        for comment in comments:
+            try:
+                data = comment["data"]
+                id = data["id"]
+                body = data["body"]
+                author_id = data.get("author_fullname") or ""
+                author_id = author_id.removeprefix("t2_")
+                if author_id == AUTOMOD_ID:
+                    self.logger.debug(f"Comment {id} is by automod, skipping")
+                    continue
+                if len(body) == 0:
+                    # Consider an empty comment a miss
+                    self.logger.info(f"Comment {id} was empty")
+                    continue
+                if body == "[removed]" or body == "[deleted]":
+                    # Consider a deleted comment a miss
+                    self.logger.info(f"Comment {id} was {body}")
+                    continue
+                fields = [
+                    id,
+                    int(data["created_utc"]),
+                    data["subreddit"],
+                    author_id,
+                    data["parent_id"],
+                    data["link_id"],
+                    data["ups"],
+                    data["downs"],
+                    util.multiline_to_csv(body),
+                ]
+                rows.append(fields)
+                for col_name, field in zip(COMMENT_COLS, fields):
+                    assert field is not None, col_name
+                    if col_name != AUTHOR_ID:
+                        assert field != "", col_name
+                id_int = int(id, 36)
+                self.time_ranges.notify_requested(id_int, True)
+                misses.remove(id_int)
+            except:
+                raise Exception(f"Got exception while processing {comment}")
+
+        # We write these at the end to avoid writing some rows and then having to error
+        self.main_csv.writerows(rows)
         for id in misses:
-            self.time_ranges.notify_requested(int(id, 36), False)
+            self.time_ranges.notify_requested(id, False)
             self.missed_comments_file.write(f"{id}\n")
 
         self.main_csv_f.flush()
