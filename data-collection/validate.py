@@ -10,8 +10,9 @@ there aren't duplicate hit or miss IDs, and the IDs increase with the timestamps
 """
 
 import numpy as np
+import os
 import pandas as pd
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Iterable, Optional
 
 import util
 from util import COMMENTS_FILE_NAME, MISSED_FILE_NAME
@@ -68,7 +69,7 @@ def run_check(f: Callable, *args, **kwargs) -> list[str]:
 
 
 @_check(happy_msg="No missing runs", error_msg=lambda runs: f"Missing runs: {runs}")
-def missing_runs(run_nums: list[int]):
+def missing_runs(run_nums: Iterable[int]):
     return [i for i in range(max(run_nums)) if i not in run_nums]
 
 
@@ -83,15 +84,16 @@ def duplicate_comments(df: pd.DataFrame) -> pd.DataFrame:
 
 @_check(
     happy_msg="Found no duplicate misses",
-    error_msg=lambda dupes: f"Found duplicate misses: {dupes}",
+    error_msg=lambda dupes: f"Found {len(dupes)} duplicate misses: "
+    + (
+        ", ".join(map(str, dupes))
+        if len(dupes) < 10
+        else ", ".join(map(str, dupes[:10])) + ", ..."
+    ),
 )
-def duplicate_misses(misses: list[int]) -> list[int]:
+def duplicate_misses(misses: pd.Series) -> list[str]:
     """Find duplicate misses (assumes they're sorted)"""
-    dupes = []
-    for i in range(len(misses) - 1):
-        if misses[i] == misses[i + 1]:
-            dupes.append(np.base_repr(misses[i], 36))
-    return dupes
+    return [np.base_repr(id, 36) for id in misses[misses.duplicated(keep=False)]]
 
 
 @_check(
@@ -108,12 +110,12 @@ def find_out_of_order_ids(df: pd.DataFrame) -> Optional[pd.DataFrame]:
     return None
 
 
-def validate(df: pd.DataFrame, misses: list[int]):
+def validate(df: pd.DataFrame, misses: pd.Series):
     """Print out any problems detected in the data"""
     _validate_helper(df, misses, [])
 
 
-def _validate_helper(df: pd.DataFrame, misses: list[int], issues: list[str]):
+def _validate_helper(df: pd.DataFrame, misses: pd.Series, issues: list[str]):
     """
     This helper just exists so that a list of previously found issues can be passed
     in when we're running this as a script
@@ -129,7 +131,6 @@ def _validate_helper(df: pd.DataFrame, misses: list[int], issues: list[str]):
         print("Found issues:")
         for issue in issues:
             print(f"- {issue}")
-        exit(1)
     else:
         print("Everything good")
 
@@ -146,30 +147,32 @@ if __name__ == "__main__":
 
     issues.extend(run_check(missing_runs, run_nums))
 
-    misses = []
-    comment_dfs = []
+    comments_files = []
+    misses_files = []
 
     for run_dir in runs.values():
-        try:
-            comment_dfs.append(util.load_comments(run_dir))
-        except FileNotFoundError:
+        if os.path.exists(os.path.join(run_dir, COMMENTS_FILE_NAME)):
+            comments_files.append(run_dir)
+        else:
             msg = f"No {COMMENTS_FILE_NAME} in {run_dir}"
             print(f"❌ {msg}")
             issues.append(msg)
 
-        try:
-            misses.extend(util.load_misses(run_dir))
-        except FileNotFoundError:
+        if os.path.exists(os.path.join(run_dir, MISSED_FILE_NAME)):
+            misses_files.append(run_dir)
+        else:
             msg = f"No {MISSED_FILE_NAME} in {run_dir}"
             print(f"❌ {msg}")
             issues.append(msg)
 
-    if len(comment_dfs) > 0:
-        df = pd.concat(comment_dfs, axis=0, ignore_index=True)
-        df = util.sort_comments(df)
+    if len(comments_files) > 0:
+        df = util.load_comments(*comments_files)
     else:
         df = pd.DataFrame([], columns=util.COMMENT_COLS)
 
-    misses.sort()
+    if len(misses_files) > 0:
+        misses = util.load_misses(*misses_files)
+    else:
+        misses = pd.Series([])
 
     _validate_helper(df, misses, issues)

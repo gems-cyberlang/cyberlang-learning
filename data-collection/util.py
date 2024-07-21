@@ -71,7 +71,7 @@ def load_misses(*paths: str) -> pd.Series:
             raise FileNotFoundError(path)
         with open(path, "r") as f:
             misses.extend(int(id, 36) for id in f.readlines())
-    return pd.Series(misses)
+    return pd.Series(misses).sort_values()
 
 
 def init_reddit() -> praw.Reddit:
