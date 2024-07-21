@@ -46,8 +46,12 @@ def load_comments(*paths: str) -> pd.DataFrame:
 
     df = pd.concat(dfs, axis=0, ignore_index=True)
     df[ID] = df[ID].apply(lambda id: int(str(id), 36))
-    df = df.sort_values([ID]).reset_index(drop=True)
+    df = sort_comments(df)
     return df
+
+
+def sort_comments(df: pd.DataFrame) -> pd.DataFrame:
+    return df.sort_values([ID]).reset_index(drop=True)
 
 
 def load_misses(path: str) -> list[int]:

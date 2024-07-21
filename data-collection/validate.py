@@ -11,15 +11,76 @@ there aren't duplicate hit or miss IDs, and the IDs increase with the timestamps
 
 import numpy as np
 import pandas as pd
+from typing import Any, Callable, Optional
 
 import util
+from util import COMMENTS_FILE_NAME, MISSED_FILE_NAME
 
 
+_checks = {}
+"""Maps functions that get bad rows or whatever to functions that print errors
+and return a list of issues"""
+
+
+def _check(
+    happy_msg: str,
+    error_msg: str | Callable[[Any], str],
+    is_error: Optional[Callable[[Any], bool]] = None,
+):
+    def decorator(f):
+        fn_name = f.__name__
+
+        def make_err(res):
+            msg = error_msg if isinstance(error_msg, str) else error_msg(res)
+            print(f"❌ {msg} (call validate.{fn_name} for more info)")
+            return msg
+
+        def check_fn(*args, **kwargs):
+            res = f(*args, **kwargs)
+            if is_error is not None:
+                if is_error(res):
+                    return [make_err(res)]
+            elif isinstance(res, pd.DataFrame):
+                if len(res) > 0:
+                    err = [make_err(res)]
+                    print("Bad rows:")
+                    print(res)
+                    return err
+            elif isinstance(res, list):
+                if len(res) > 0:
+                    err = [make_err(res)]
+                    return err
+            elif res is not None:
+                raise ValueError(f"No idea how to handle {res}")
+
+            print("✅", happy_msg)
+            return []
+
+        _checks[f] = check_fn
+
+        return f
+
+    return decorator
+
+
+@_check(happy_msg="No missing runs", error_msg=lambda runs: f"Missing runs: {runs}")
+def missing_runs(run_nums: list[int]):
+    return [i for i in range(max(run_nums)) if i not in run_nums]
+
+
+@_check(
+    happy_msg="Found no duplicate comment IDs",
+    error_msg="Found comments with duplicate IDs",
+)
 def duplicate_comments(df: pd.DataFrame) -> pd.DataFrame:
     """Find comments that have the same ID"""
-    return df[df.duplicated(subset=["comment_id"], keep=False)]
+    return df[df.duplicated(subset=[util.ID], keep=False)]
 
 
+@_check(
+    happy_msg="Found no duplicate misses",
+    error_msg=lambda dupes: f"Found duplicate misses: {dupes}",
+)
 def duplicate_misses(misses: list[int]) -> list[int]:
     """Find duplicate misses (assumes they're sorted)"""
     dupes = []
@@ -29,15 +90,18 @@ def duplicate_misses(misses: list[int]) -> list[int]:
     return dupes
 
 
-def all_ids_sequential(df: pd.DataFrame) -> bool:
-    """Do all comment IDs increase with their timestamps?"""
+@_check(
+    happy_msg="Found no out-of-order IDs",
+    error_msg="Found out-of-order IDs",
+)
+def find_out_of_order_ids(df: pd.DataFrame) -> Optional[pd.DataFrame]:
+    """Find the first two comment where their IDs don't increase with their timestamps"""
     for i in range(len(df) - 1):
         curr = df.iloc[i]
         next = df.iloc[i + 1]
         if curr.time > next.time:
-            print(f"❌ Found out-of-order ID at {i}!")
-            return False
-    return True
+            return df.iloc[i : i + 2]
+    return None
 
 
 def validate(df: pd.DataFrame, misses: list[int]):
@@ -51,26 +115,11 @@ def _validate_helper(df: pd.DataFrame, misses: list[int], issues: list[str]):
     in when we're running this as a script
     """
 
-    dupes = duplicate_comments(df)
-    if len(dupes) == 0:
-        print("✅ Found no duplicate comment IDs")
-    else:
-        print("❌ Found comments with duplicate IDs:")
-        print(dupes)
-        issues.append("Comments with duplicate IDs")
+    issues.extend(_checks[duplicate_comments](df))
 
-    dupes = duplicate_misses(misses)
-    if len(dupes) > 0:
-        print("❌ Found duplicate misses:")
-        print(dupes)
-        issues.append("Misses with duplicate IDs")
-    else:
-        print("✅ Found no duplicate misses")
+    issues.extend(_checks[duplicate_misses](misses))
 
-    if all_ids_sequential(df):
-        print("✅ All IDs were in order")
-    else:
-        issues.append("Out-of-order IDs")
+    issues.extend(_checks[find_out_of_order_ids](df))
 
     if len(issues) > 0:
         print("Found issues:")
@@ -91,10 +140,7 @@ if __name__ == "__main__":
 
     issues = []
 
-    if max(run_nums) + 1 != len(run_nums):
-        msg = f"Missing run? runs={run_nums}"
-        print(f"❌ {msg}")
-        issues.append(msg)
+    issues.extend(_checks[missing_runs](run_nums))
 
     misses = []
     comment_dfs = []
@@ -103,19 +149,22 @@ if __name__ == "__main__":
         try:
             comment_dfs.append(util.load_comments(run_dir))
         except FileNotFoundError:
-            msg = f"{run_dir} has no comments file"
+            msg = f"No {COMMENTS_FILE_NAME} in {run_dir}"
             print(f"❌ {msg}")
             issues.append(msg)
 
         try:
             misses.extend(util.load_misses(run_dir))
         except FileNotFoundError:
-            msg = f"{run_dir} has no missed IDs file"
+            msg = f"No {MISSED_FILE_NAME} in {run_dir}"
             print(f"❌ {msg}")
             issues.append(msg)
 
-    df = pd.concat(comment_dfs, axis=0, ignore_index=True)
-    df = df.sort_values(["comment_id"]).reset_index(drop=True)
+    if len(comment_dfs) > 0:
+        df = pd.concat(comment_dfs, axis=0, ignore_index=True)
+        df = util.sort_comments(df)
+    else:
+        df = pd.DataFrame([], columns=util.COMMENT_COLS)
 
     misses.sort()
 
