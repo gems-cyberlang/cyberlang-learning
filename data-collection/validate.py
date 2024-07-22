@@ -7,6 +7,8 @@ Can be used as either a script or as a module/library/whatever (call `validate.v
 
 TODO make this more thorough. Right now, it just checks that all the files exist,
 there aren't duplicate hit or miss IDs, and the IDs increase with the timestamps
+
+TODO check for NaNs
 """
 
 import numpy as np
@@ -93,7 +95,7 @@ def duplicate_comments(df: pd.DataFrame) -> pd.DataFrame:
 )
 def duplicate_misses(misses: pd.Series) -> list[str]:
     """Find duplicate misses (assumes they're sorted)"""
-    return [np.base_repr(id, 36) for id in misses[misses.duplicated(keep=False)]]
+    return [util.to_b36(id) for id in misses[misses.duplicated(keep=False)]]
 
 
 @_check(

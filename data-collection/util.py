@@ -1,6 +1,7 @@
 import configparser
 from datetime import datetime
 from glob import glob
+import numpy as np
 import os
 import pandas as pd
 import praw
@@ -19,6 +20,11 @@ _curr_dir = os.path.dirname(__file__)
 
 out_dir = os.path.join(_curr_dir, "out")
 """The directory in which all the runs are"""
+
+
+def to_b36(id: int) -> str:
+    """Get the base 36 repr of an ID to pass to Reddit or store"""
+    return np.base_repr(id, 36).lower()
 
 
 def get_runs() -> dict[int, str]:

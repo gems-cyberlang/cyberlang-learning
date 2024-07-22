@@ -27,11 +27,6 @@ def get_formatted_time():
     return time.strftime("%Y-%m-%d-%H-%M-%S")
 
 
-def to_b36(id: int) -> str:
-    """Get the base 36 repr of an ID to pass to Reddit or store"""
-    return np.base_repr(id, 36).lower()
-
-
 class ProtectedBlock:
     """
     A context manager to protect a block from being interrupted by Ctrl+C.
@@ -216,7 +211,7 @@ class gems_runner:
         """
         i = None  # TODO idk what to assign to this
         self.logger.debug(f"Attempting group {i} of size {REQUEST_PER_CALL}")
-        ids = [to_b36(int(id)) for id in id_ints]
+        ids = [util.to_b36(int(id)) for id in id_ints]
 
         try:
             ret = self.reddit.request(
@@ -295,7 +290,7 @@ class gems_runner:
             return False
         next_ids = self.time_ranges.next_ids(REQUEST_PER_CALL)
         self.logger.debug(
-            f"Requesting {len(next_ids)}: {','.join(map(to_b36, next_ids))}"
+            f"Requesting {len(next_ids)}: {','.join(map(util.to_b36, next_ids))}"
         )
 
         with ProtectedBlock():
