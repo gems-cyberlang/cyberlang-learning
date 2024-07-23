@@ -6,8 +6,6 @@ Find IDs for a bunch of timestamps and generate a config based on that
 import argparse
 import datetime
 import logging
-import math
-import numpy as np
 from typing import Optional
 import util
 
@@ -59,11 +57,17 @@ time_ranges.append(min(curr, time_last))
 
 logger.debug(f"{time_ranges=}")
 
-bounds: dict[datetime.datetime, tuple[Optional[int], Optional[int]]] = {
-    range_start: (None, None) for range_start in time_ranges
-}
-bounds[time_first] = (low, None)
-bounds[time_ranges[len(time_ranges) - 1]] = (None, high)
+bounds: dict[
+    datetime.datetime,
+    tuple[
+        Optional[int],
+        Optional[datetime.datetime],
+        Optional[int],
+        Optional[datetime.datetime],
+    ],
+] = {range_start: (None, None, None, None) for range_start in time_ranges}
+bounds[time_first] = (low, None, None, None)
+bounds[time_ranges[len(time_ranges) - 1]] = (None, None, high, None)
 
 # todo avoid re-requesting IDs that were misses
 
@@ -72,13 +76,18 @@ bounds[time_ranges[len(time_ranges) - 1]] = (None, high)
 
 def bounds_str():
     res = []
-    for range_start, (low, high) in bounds.items():
+    for range_start, (low, low_time, high, high_time) in bounds.items():
         res.append(
             str(range_start.date())
             + ", "
-            + ("-" if low is None else util.to_b36(low))
+            + ("-".center(7) if low is None else util.to_b36(low))
+            + "-"
+            + ("-".center(7) if high is None else util.to_b36(high))
             + ", "
-            + ("-" if high is None else util.to_b36(high))
+            + str(low_time)
+            + "-"
+            + str(high_time)
+            + ("" if low is None or high is None else ", space: " + str(high - low))
         )
     return "\n".join(res)
 
@@ -92,7 +101,7 @@ def search(limit: int):
     """Holds (low, high) tuples representing ranges of IDs to request between"""
     curr_start = None
     for range_start in time_ranges:
-        low, high = bounds[range_start]
+        low, _, high, _ = bounds[range_start]
         if low is not None:
             curr_start = low
         else:
@@ -102,8 +111,13 @@ def search(limit: int):
             assert (
                 curr_start is not None
             ), f"{range_start=}, {high=}, bounds={bounds_str()}"
-            request_ranges.append((curr_start, high))
-            curr_start = high
+            if curr_start < high:
+                request_ranges.append((curr_start, high))
+                curr_start = high
+
+    if len(request_ranges) == 0:
+        logger.info(f"Done with {limit} iterations to go!")
+        return
 
     logger.debug(
         str([f"{util.to_b36(low)}-{util.to_b36(high)}" for low, high in request_ranges])
@@ -113,12 +127,16 @@ def search(limit: int):
     """Number of requests allotted per range"""
     num_left = 100
     while num_left > 0:
+        added = False
         for i, (start, end) in enumerate(request_ranges):
             if num_left == 0:
                 break
             if num_requests[i] + 1 < end - start:
                 num_requests[i] += 1
                 num_left -= 1
+                added = True
+        if not added:
+            break
 
     ids = []
     for i, (n, (start, end)) in enumerate(zip(num_requests, request_ranges)):
@@ -134,22 +152,26 @@ def search(limit: int):
         time = datetime.datetime.fromtimestamp(unix_timestamp)
 
         for range_start in bounds.keys():
-            low, high = bounds[range_start]
+            low, low_time, high, high_time = bounds[range_start]
             if time < range_start:
                 if low is None or low < id:
                     assert (
                         high is None or id <= high
                     ), f"{id=}, {range_start=} {bounds=}"
                     low = id
+                    low_time = time
             elif range_start < time:
                 if high is None or id < high:
                     assert low is None or low <= id, f"{id=}, {range_start=} {bounds=}"
                     high = id
+                    high_time = time
             else:
                 # This comment's good enough
                 low = id
+                low_time = time
                 high = id
-            bounds[range_start] = low, high
+                high_time = time
+            bounds[range_start] = low, low_time, high, high_time
 
     if len(comments) == 0:
         logger.error("No comments!")
@@ -161,84 +183,44 @@ def search(limit: int):
     search(limit - 1)
 
 
-search(20)
+search(25)
 
-logger.info("Done!")
 logger.info(bounds_str())
 
 """
-Example output:
-2008-01-01, c02sbfd, c02sbfe
-2008-03-01, c03biqt, c03biqt
-2008-05-01, c03vir4, c03vir5
-2008-07-01, c04jg0y, c04jg0z
-2008-09-01, c058yua, c058yua
-2008-11-01, c064jdt, c064jdu
-2009-01-01, c06vwuk, c06vwum
-2009-03-01, c07yn96, c07yn97
-2009-05-01, c098svx, c098svy
-2009-07-01, c0apqto, c0apqto
-2009-09-01, c0cn3fy, c0cn3fz
-2009-11-01, c0f6v74, c0f6v75
-2010-01-01, c0i1e1i, c0i1e1j
-2010-03-01, c0ld5e5, c0ld5e5
-2010-05-01, c0p7jbw, c0p7jbw
-2010-07-01, c0t9vme, c0t9vme
-2010-09-01, c0y8lw2, c0y8lw2
-2010-11-01, c141zi3, c141zi3
-2011-01-01, c1b0v8e, c1b0v8e
-2011-03-01, c1isfw7, c1isfw7
-2011-05-01, c1rtn0n, c1rtn0n
-2011-07-01, c22yg5q, c22yg5q
-2011-09-01, c2gojmv, c2gojmv
-2011-11-01, c2w1g4c, c2w1g4c
-2012-01-01, c3cw037, c3cw037
-2012-03-01, c3whsiz, c3whsiz
-2012-05-01, c4im2yx, c4im2yx
-2012-07-01, c57w3y1, c57w3y1
-2012-09-01, c61sjpt, c61sjqc
-2012-11-01, c6uovjd, c6uovjy
-2013-01-01, c7p3d9x, c7p3dai
-2013-03-01, c8np15h, c8np15h
-2013-05-01, c9q3oei, c9q3oei
-2013-07-01, catkswp, catksxa
-2013-09-01, cbzf66v, cbzf66v
-2013-11-01, cd482ug, cd484zf
-2014-01-01, ceel86f, ceel87l
-2014-03-01, cfrj67y, cfrj67y
-2014-05-01, ch6m47h, ch6m47h
-2014-07-01, cilges8, cilges8
-2014-09-01, ck5znw5, ck5znw5
-2014-11-01, clprctn, clprdcv
-2015-01-01, cnaz5pt, cnaz5r0
-2015-03-01, cp0fol1, cp0nabr
-2015-05-01, cquovau, cquovau
-2015-07-01, csoccfq, csocchi
-2015-09-01, cumohyt, cumohyt
-2015-11-01, cwk4wfb, cwk4wtq
-2016-01-01, cyi1s5c, cyi24z9
-2016-03-01, d0j0z9w, d0j0zdh
-2016-05-01, d2niw2i, d2osiiw
-2016-07-01, d4uxkz0, d4uxl0s
-2016-09-01, d74zmls, d74zmnl
-2016-11-01, d9gew9e, d9gewb7
-2017-01-01, dbuwt1t, dbuwt3l
-2017-03-01, dectjcz, dectjcz
-2017-05-01, dgz0ctg, dgz37gy
-2017-07-01, djmuqzr, djmur2g
-2017-09-01, dmesrjg, dmesrm5
-2017-11-01, dp6cz18, dp6cz3x
-2018-01-01, drzzzzg, ds7lqpt
-2018-03-01, dv02e2g, dv02e55
-2018-05-01, dy928i6, dy928kv
-2018-07-01, e1l12h6, e1l9mfq
-2018-09-01, e572fe8, e572hss
-2018-11-01, e8ty12t, e8ty12t
-2019-01-01, ecztael, ecztael
-2019-03-01, ehj7u9w, ehj8wrq
-2019-05-01, em76lww, em76m2b
-2019-07-01, esgge8f, esgij82
-2019-09-01, eycldvj, eyrsvc9
-2019-11-01, f53x5bj, f7n623z
-2020-01-01, fc2unhw, fcpnvp0
+Example output for `python find_ids.py 2008-01-01 2024-01-01 6 c020000 k000000`:
+
+2008-01-01, c02sbfd-c02sbfe, 2007-12-31 23:59:49-2008-01-01 00:00:03, space: 1
+2008-07-01, c04jg0y-c04jg0z, 2008-06-30 23:59:49-2008-07-01 00:00:02, space: 1
+2009-01-01, c06vwuk-c06vwum, 2008-12-18 00:54:46-2009-01-07 13:00:28, space: 2
+2009-07-01, c0apqto-c0apqto, 2009-07-01 00:00:00-2009-07-01 00:00:00, space: 0
+2010-01-01, c0i1e1i-c0i1e1j, 2009-12-31 23:59:57-2010-01-01 00:00:01, space: 1
+2010-07-01, c0t9vme-c0t9vme, 2010-07-01 00:00:00-2010-07-01 00:00:00, space: 0
+2011-01-01, c1b0v8e-c1b0v8e, 2011-01-01 00:00:00-2011-01-01 00:00:00, space: 0
+2011-07-01, c22yg5s-c22yg5s, 2011-07-01 00:00:00-2011-07-01 00:00:00, space: 0
+2012-01-01, c3cw038-c3cw038, 2012-01-01 00:00:00-2012-01-01 00:00:00, space: 0
+2012-07-01, c57w3y2-c57w3y2, 2012-07-01 00:00:00-2012-07-01 00:00:00, space: 0
+2013-01-01, c7p3da4-c7p3da4, 2013-01-01 00:00:00-2013-01-01 00:00:00, space: 0
+2013-07-01, catksx2-catksx2, 2013-07-01 00:00:00-2013-07-01 00:00:00, space: 0
+2014-01-01, ceel87h-ceel87h, 2014-01-01 00:00:00-2014-01-01 00:00:00, space: 0
+2014-07-01, cilgesd-cilgesd, 2014-07-01 00:00:00-2014-07-01 00:00:00, space: 0
+2015-01-01, cnaz5qj-cnaz5qj, 2015-01-01 00:00:00-2015-01-01 00:00:00, space: 0
+2015-07-01, csocche-csocche, 2015-07-01 00:00:00-2015-07-01 00:00:00, space: 0
+2016-01-01, cyi1yvt-cyi1yvt, 2016-01-01 00:00:00-2016-01-01 00:00:00, space: 0
+2016-07-01, d4uxl05-d4uxl05, 2016-07-01 00:00:00-2016-07-01 00:00:00, space: 0
+2017-01-01, dbuwt32-dbuwt32, 2017-01-01 00:00:00-2017-01-01 00:00:00, space: 0
+2017-07-01, djmur0k-djmur0k, 2017-07-01 00:00:00-2017-07-01 00:00:00, space: 0
+2018-01-01, ds0z2ys-ds0z2ys, 2018-01-01 00:00:00-2018-01-01 00:00:00, space: 0
+2018-07-01, e1l4h8q-e1l4h8q, 2018-07-01 00:00:00-2018-07-01 00:00:00, space: 0
+2019-01-01, ecztaeb-ecztaeb, 2019-01-01 00:00:00-2019-01-01 00:00:00, space: 0
+2019-07-01, esghzwj-esghzwj, 2019-07-01 00:00:00-2019-07-01 00:00:00, space: 0
+2020-01-01, fcp98eu-fcp98eu, 2020-01-01 00:00:00-2020-01-01 00:00:00, space: 0
+2020-07-01, fwjti6k-fwjti6k, 2020-07-01 00:00:00-2020-07-01 00:00:00, space: 0
+2021-01-01, ghoeh1e-ghoeh1e, 2021-01-01 00:00:00-2021-01-01 00:00:00, space: 0
+2021-07-01, h3n80zq-h3n80zq, 2021-07-01 00:00:00-2021-07-01 00:00:00, space: 0
+2022-01-01, hqruo2y-hqruo2y, 2022-01-01 00:00:00-2022-01-01 00:00:00, space: 0
+2022-07-01, ieesd59-ieesd59, 2022-07-01 00:00:00-2022-07-01 00:00:00, space: 0
+2023-01-01, j2gxjqp-j2gxjqp, 2023-01-01 00:00:00-2023-01-01 00:00:00, space: 0
+2023-07-01, jq7yt2u-jq7yt2u, 2023-07-01 00:00:00-2023-07-01 00:00:00, space: 0
+2024-01-01, jzzzzzz-k000000, 2023-09-10 14:31:47-None, space: 1
 """

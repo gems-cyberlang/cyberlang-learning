@@ -29,6 +29,10 @@ Each time range also specifies the minimum number of comments that need to be
 collected in that time range. This is so we can do that oversampling thing Nesse
 suggested.
 
+TODO use find_ids.py to generate the config file
+
+TODO save config file with each run to verify that new runs are compatible with previous runs
+
 ## Output
 
 This will create an `out` directory to put all output, and within that, each run
