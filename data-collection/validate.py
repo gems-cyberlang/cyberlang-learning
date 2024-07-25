@@ -11,7 +11,6 @@ there aren't duplicate hit or miss IDs, and the IDs increase with the timestamps
 TODO check for NaNs
 """
 
-import numpy as np
 import os
 import pandas as pd
 from typing import Any, Callable, Iterable, Optional
@@ -111,6 +110,9 @@ def find_out_of_order_ids(df: pd.DataFrame) -> Optional[pd.DataFrame]:
             return df.iloc[i : i + 2]
     return None
 
+def unexpected_nans(df: pd.DataFrame) -> Optional[pd.DataFrame]:
+    """Find rows with NaNs in unexpected places"""
+    pass
 
 def validate(df: pd.DataFrame, misses: pd.Series):
     """Print out any problems detected in the data"""

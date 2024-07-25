@@ -9,6 +9,8 @@ import logging
 from typing import Optional
 import util
 
+NOT_THIS_FUCKING_ID_AGAIN = {int("f22fgrh", 36)}
+
 reddit = util.init_reddit()
 
 logger = logging.getLogger(__name__)
@@ -35,9 +37,17 @@ parser.add_argument("start_id", help="Lower bound on ID (inclusive)")
 parser.add_argument("end_id", help="Upper bound on ID (inclusive)")
 args = parser.parse_args()
 
-time_first = datetime.datetime.fromisoformat(args.time_first)
-time_last = datetime.datetime.fromisoformat(args.time_last)
-time_step = args.time_step
+time_first = datetime.datetime.combine(
+    date=datetime.datetime.fromisoformat(args.time_first),
+    time=datetime.time(0, 0, 0),
+    tzinfo=datetime.timezone.utc,
+)
+time_last = datetime.datetime.combine(
+    date=datetime.datetime.fromisoformat(args.time_last),
+    time=datetime.time(0, 0, 0),
+    tzinfo=datetime.timezone.utc,
+)
+time_step: int = args.time_step
 
 low = int(args.start_id, 36)
 high = int(args.end_id, 36)
@@ -78,7 +88,7 @@ def bounds_str():
     res = []
     for range_start, (low, low_time, high, high_time) in bounds.items():
         res.append(
-            str(range_start.date())
+            str(range_start)
             + ", "
             + ("-".center(7) if low is None else util.to_b36(low))
             + "-"
@@ -105,12 +115,12 @@ def search(limit: int):
         if low is not None:
             curr_start = low
         else:
-            assert curr_start is not None, f"{range_start=}, bounds={bounds_str()}"
+            assert curr_start is not None, f"{range_start=!s}, bounds={bounds_str()}"
 
         if high is not None:
             assert (
                 curr_start is not None
-            ), f"{range_start=}, {high=}, bounds={bounds_str()}"
+            ), f"{range_start=!s}, {high=}, bounds={bounds_str()}"
             if curr_start < high:
                 request_ranges.append((curr_start, high))
                 curr_start = high
@@ -149,7 +159,10 @@ def search(limit: int):
     for comment in comments:
         id = int(comment.id, 36)
         unix_timestamp: int = comment.created_utc
-        time = datetime.datetime.fromtimestamp(unix_timestamp)
+        time = datetime.datetime.fromtimestamp(unix_timestamp, tz=datetime.timezone.utc)
+
+        if id in NOT_THIS_FUCKING_ID_AGAIN:
+            continue
 
         for range_start in bounds.keys():
             low, low_time, high, high_time = bounds[range_start]
@@ -157,12 +170,14 @@ def search(limit: int):
                 if low is None or low < id:
                     assert (
                         high is None or id <= high
-                    ), f"{id=}, {range_start=} {bounds=}"
+                    ), f"id={util.to_b36(id)} {time=!s}, {range_start=!s} bounds={bounds_str()}"
                     low = id
                     low_time = time
             elif range_start < time:
                 if high is None or id < high:
-                    assert low is None or low <= id, f"{id=}, {range_start=} {bounds=}"
+                    assert (
+                        low is None or low <= id
+                    ), f"id={util.to_b36(id)} {time=!s}, {range_start=!s} bounds:\n{bounds_str()}"
                     high = id
                     high_time = time
             else:
@@ -186,6 +201,29 @@ def search(limit: int):
 search(25)
 
 logger.info(bounds_str())
+
+print(f"timeStart: {time_ranges[0].date()}")
+print(f"timeStep: {time_step} # months")
+print(f"timeRanges:")
+for i, range_start in enumerate(time_ranges):
+    low, low_time, high, high_time = bounds[range_start]
+    assert low is not None and high is not None, f"{range_start=}"
+    if low == high:
+        id = low
+        comment = f"Time: {low_time}"
+    elif low + 1 == high:
+        assert low_time < range_start < high_time
+        id = high
+        comment = f"Time: {high_time}"
+    else:
+        id = (low + high) // 2
+        comment = f"Average of {util.to_b36(low)} ({low_time}) and {util.to_b36(high)} ({high_time})"
+
+    if i < len(time_ranges) - 1:
+        print(f"- start: {util.to_b36(id)} # {comment}")
+        print(f"  min: 200 # default")
+    else:
+        print(f"  end: {util.to_b36(id)} # {comment}")
 
 """
 Example output for `python find_ids.py 2008-01-01 2024-01-01 6 c020000 k000000`:

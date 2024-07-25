@@ -1,12 +1,84 @@
-# These are totally made-up numbers, please change them
-
-timeStart: 2020-01-01
-timeStep: 16 # 16 weeks = 4 months
+timeStart: 2010-01-01
+timeStep: 3 # months
 timeRanges:
-  - start: k000000
-    min: 600
-  - start: ka00000
-    min: 700
-  - start: kw00000
-    min: 500
-    end: l000000
+- start: c0i12v3 # Time: 2010-01-01 00:00:00+00:00
+  min: 200 # default
+- start: c0na6o6 # Time: 2010-04-01 00:00:00+00:00
+  min: 200 # default
+- start: c0t9cbz # Time: 2010-07-01 00:00:02+00:00
+  min: 200 # default
+- start: c1112h4 # Time: 2010-10-01 00:00:01+00:00
+  min: 200 # default
+- start: c1b06fp # Time: 2011-01-01 00:00:00+00:00
+  min: 200 # default
+- start: c1n9joy # Time: 2011-04-01 00:00:00+00:00
+  min: 200 # default
+- start: c22x4av # Time: 2011-07-01 00:00:00+00:00
+  min: 200 # default
+- start: c2nx2zp # Time: 2011-10-01 00:00:00+00:00
+  min: 200 # default
+- start: c3ctzsm # Time: 2012-01-01 00:00:00+00:00
+  min: 200 # default
+- start: c4745j0 # Time: 2012-04-01 00:00:00+00:00
+  min: 200 # default
+- start: c57v38k # Time: 2012-07-01 00:00:00+00:00
+  min: 200 # default
+- start: c6fqq51 # Time: 2012-10-01 00:00:00+00:00
+  min: 200 # default
+- start: c7ozqti # Time: 2013-01-01 00:00:00+00:00
+  min: 200 # default
+- start: c95zlrm # Time: 2013-04-01 00:00:00+00:00
+  min: 200 # default
+- start: catg7k5 # Time: 2013-07-01 00:00:01+00:00
+  min: 200 # default
+- start: cciitvr # Time: 2013-10-01 00:00:00+00:00
+  min: 200 # default
+- start: ceefsw6 # Time: 2014-01-01 00:00:00+00:00
+  min: 200 # default
+- start: cggwbq6 # Time: 2014-04-01 00:00:00+00:00
+  min: 200 # default
+- start: cila8wp # Time: 2014-07-01 00:00:00+00:00
+  min: 200 # default
+- start: ckx04oz # Time: 2014-10-01 00:00:00+00:00
+  min: 200 # default
+- start: cnas906 # Time: 2015-01-01 00:00:00+00:00
+  min: 200 # default
+- start: cpx9gpw # Time: 2015-04-01 00:00:00+00:00
+  min: 200 # default
+- start: cso5mfg # Time: 2015-07-01 00:00:00+00:00
+  min: 200 # default
+- start: cvjxnvq # Time: 2015-10-01 00:00:00+00:00
+  min: 200 # default
+- start: cyhtlqu # Time: 2016-01-01 00:00:00+00:00
+  min: 200 # default
+- start: d1l58ra # Time: 2016-04-01 00:00:00+00:00
+  min: 200 # default
+- start: d4up6hw # Time: 2016-07-01 00:00:00+00:00
+  min: 200 # default
+- start: d88zq3x # Time: 2016-10-01 00:00:00+00:00
+  min: 200 # default
+- start: dbumnqb # Time: 2017-01-01 00:00:00+00:00
+  min: 200 # default
+- start: dfo9270 # Time: 2017-04-01 00:00:00+00:00
+  min: 200 # default
+- start: djml19f # Time: 2017-07-01 00:00:00+00:00
+  min: 200 # default
+- start: dnqik1n # Time: 2017-10-01 00:00:00+00:00
+  min: 200 # default
+- start: ds0n32e # Time: 2018-01-01 00:00:00+00:00
+  min: 200 # default
+- start: dwlqnni # Time: 2018-04-01 00:00:00+00:00
+  min: 200 # default
+- start: e1ksyps # Time: 2018-07-01 00:00:00+00:00
+  min: 200 # default
+- start: e6xucdd # Time: 2018-10-01 00:00:00+00:00
+  min: 200 # default
+- start: eczayoi # Time: 2019-01-01 00:00:00+00:00
+  min: 200 # default
+- start: ejualog # Time: 2019-04-01 00:00:00+00:00
+  min: 200 # default
+- start: esfzq23 # Time: 2019-07-01 00:00:00+00:00
+  min: 200 # default
+- start: f22fgtx # Time: 2019-10-01 00:00:00+00:00
+  min: 200 # default
+  end: fconouy # Time: 2020-01-01 00:00:00+00:00
