@@ -68,7 +68,8 @@ parser.add_argument(
 args = parser.parse_args()
 
 config = yaml.safe_load(open(args.config_file))
-time_step = datetime.timedelta(weeks=config["timeStep"])
+time_step: int = config["timeStep"]
+"""How many months long each time range is"""
 time_ranges_raw: list[dict] = config["timeRanges"]
 time_ranges = []
 start_time: datetime.date = config["timeStart"]
@@ -82,16 +83,21 @@ for i, time_range in enumerate(time_ranges_raw):
         raise AssertionError(
             f"An end ID should've been given for time range {time_range}"
         )
+    prev_time = start_time
+    year = start_time.year + (start_time.month + time_step) // 12
+    month = (start_time.month + time_step) % 12
+    start_time = start_time.replace(year=year, month=month)
     time_ranges.append(
         TimeRange(
-            start_date=start_time,
-            end_date=start_time + time_step,
+            start_date=prev_time,
+            end_date=start_time,
             start_id=start_id,
             end_id=end_id,
             min_comments=time_range["min"],
         )
     )
-    start_time += time_step
+
+print(time_ranges)
 
 # Load env
 if not load_dotenv(args.env_file):
