@@ -22,9 +22,16 @@ args = parser.parse_args()
 
 sel = selectors.DefaultSelector()
 
-hits_graph = st.empty()
-misses_graph = st.empty()
+st.set_page_config(page_title="Data collector dashboard", layout="wide")
 
+col1, col2 = st.columns(2)
+
+col1_elems = col1.container()
+hits_graph = col1_elems.empty()
+misses_graph = col1_elems.empty()
+
+col2_elems = col2.container()
+hit_rate_graph = col2_elems.empty()
 
 def read(conn: socket.socket):
     data = conn.recv(1024)
@@ -41,8 +48,10 @@ def read(conn: socket.socket):
 
 def draw_graph(csv: str):
     df = pd.read_csv(StringIO(csv))
+    df["Hit rate"] = df["Hits"] / (df["Hits"] + df["Misses"])
     hits_graph.bar_chart(df, x="Date", y="Hits")
     misses_graph.bar_chart(df, x="Date", y="Misses")
+    hit_rate_graph.bar_chart(df, x="Date", y="Hit rate")
 
 
 client_sock = socket.socket()
