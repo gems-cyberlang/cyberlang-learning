@@ -5,6 +5,8 @@ import itertools
 import numpy as np
 from typing import Generic, Optional, TypeVar
 
+import util
+
 SIZE_OF_ITERATION = 1000000
 
 
@@ -109,7 +111,7 @@ class PermBin(AbstractBin):
         return list(map(int, perm[self.requested : self.requested + n]))
 
     def notify_requested(self, id: int, hit: bool):
-        assert id in self, f"{id} not in {self}"
+        assert id in self, f"{util.to_b36(id)} not in {self}"
         if hit:
             self._hits += 1
         else:
@@ -165,7 +167,7 @@ class BinBin(Generic[T], AbstractBin):
 
     def notify_requested(self, id: int, hit: bool):
         bin = self.find_bin(id)
-        assert bin is not None, f"{id} not in {self}"
+        assert bin is not None, f"{util.to_b36(id)} not in {self}"
         bin.notify_requested(id, hit)
 
     def next_ids(self, n: int) -> list[int]:
@@ -310,3 +312,6 @@ class BinBinBin(BinBin[U]):
     @property
     def end_id(self):
         return self._end_id
+    
+    def __repr__(self):
+        return f"BinBinBin({','.join(map(repr, self.bins))})"

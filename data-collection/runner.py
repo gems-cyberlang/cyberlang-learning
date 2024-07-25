@@ -13,7 +13,14 @@ import time
 
 from bins import BinBinBin, TimeRange
 import util
-from util import AUTHOR_ID, AUTOMOD_ID, COMMENT_COLS, COMMENTS_FILE_NAME, MISSED_FILE_NAME
+from util import (
+    AUTHOR_ID,
+    AUTOMOD_ID,
+    COMMENT_COLS,
+    COMMENTS_FILE_NAME,
+    ID,
+    MISSED_FILE_NAME,
+)
 
 USER_AGENT = "GEMSTONE CYBERLAND RESEARCH"
 REQUEST_PER_CALL = 100
@@ -85,7 +92,7 @@ class gems_runner:
             curr_run = len(prev_run_nums)
             for run_path in prev_runs.values():
                 comments = util.load_comments(run_path)
-                comments["comment_id"].apply(
+                comments[ID].apply(
                     lambda id: self.time_ranges.notify_requested(id, True)
                 )
                 del comments
@@ -274,7 +281,7 @@ class gems_runner:
         self.main_csv.writerows(rows)
         for id in misses:
             self.time_ranges.notify_requested(id, False)
-            self.missed_comments_file.write(f"{id}\n")
+            self.missed_comments_file.write(f"{util.to_b36(id)}\n")
 
         self.main_csv_f.flush()
 
