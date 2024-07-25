@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from collections import deque
+from collections import defaultdict, deque
 import datetime
 import itertools
 import numpy as np
@@ -181,53 +181,46 @@ class BinBin(Generic[T], AbstractBin):
 
         # TODO actually prioritize bins that haven't gotten the minimum number of comments yet
 
-        # If we have more than n bins, only need to look at the first n
-        num_bins = min(n, len(self._remaining))
-        front_bins = list(itertools.islice(self._remaining, num_bins))
-        if num_bins > len(self._remaining):
-            self._remaining.rotate(-num_bins)
-
         # Number of IDs to request from each remaining bin
-        num_ids = [1] * len(front_bins)
+        num_ids = defaultdict(lambda: 0)
 
-        unrequesteds = [bin.unrequested for bin in front_bins]
-        if any_needy:
-            neededs = [
-                min(bin.needed, unrequested)
-                for bin, unrequested in zip(front_bins, unrequesteds)
-            ]
-        else:
-            # If none of the bins have a minimum to meet, just look at how many IDs
-            # inside them haven't been requested yet
-            neededs = list(unrequesteds)
+        def needed(bin: T):
+            if any_needy:
+                return min(bin.needed, bin.unrequested)
+            else:
+                # If none of the bins have a minimum to meet, just look at how many IDs
+                # inside them haven't been requested yet
+                return bin.unrequested
 
-        while sum(num_ids) < n and any(
-            needed > num_ids[i] for i, needed in enumerate(neededs)
-        ):
-            for i, needed in enumerate(neededs):
-                if needed > num_ids[i]:
-                    num_ids[i] += 1
-                    if sum(num_ids) == n:
+        while n > 0:
+            start_n = n
+            for bin in self._remaining:
+                if needed(bin) > num_ids[bin]:
+                    num_ids[bin] += 1
+                    n -= 1
+                    if n == 0:
                         break
+            if start_n == n:
+                # None of the bins had anything added to them
+                break
+            self._remaining.rotate(-(n - start_n))
 
         # If we can still request more, go up to bin.unrequested
-        if sum(num_ids) < n and any(
-            needed < unrequested for needed, unrequested in zip(neededs, unrequesteds)
-        ):
-            # todo reduce code duplication
-            while sum(num_ids) < n and any(
-                unrequested > num_ids[i] for i, unrequested in enumerate(unrequesteds)
-            ):
-                for i, unrequested in enumerate(unrequesteds):
-                    if unrequested > num_ids[i]:
-                        num_ids[i] += 1
-                        if sum(num_ids) == n:
-                            break
+        while n > 0:
+            start_n = n
+            for bin in self._remaining:
+                if bin.unrequested > num_ids[bin]:
+                    num_ids[bin] += 1
+                    n -= 1
+                    if n == 0:
+                        break
+            if start_n == n:
+                # None of the bins had anything added to them
+                break
+            self._remaining.rotate(-(n - start_n))
 
         return list(
-            itertools.chain.from_iterable(
-                bin.next_ids(n) for bin, n in zip(front_bins, num_ids)
-            )
+            itertools.chain.from_iterable(bin.next_ids(n) for bin, n in num_ids.items())
         )
 
     def _update_remaining(self):
@@ -238,7 +231,7 @@ class BinBin(Generic[T], AbstractBin):
         # But if none of the bins have a minimum to meet, don't filter them all out
 
     def _any_needy(self) -> bool:
-        # Do any of the bins have a minimum quota they haven't filled yet?
+        """Do any of the bins have a minimum quota they haven't filled yet?"""
         return any(bin.needed > 0 for bin in self._remaining)
 
 
@@ -312,6 +305,6 @@ class BinBinBin(BinBin[U]):
     @property
     def end_id(self):
         return self._end_id
-    
+
     def __repr__(self):
         return f"BinBinBin({','.join(map(repr, self.bins))})"
