@@ -60,11 +60,19 @@ script is in. Here, you can run it with `python .` (`.` means "current directory
 
 It's probably best to run with `python . -v` so you can see all the logs right there.
 
+If someone else did a bunch of runs and you want to pick up where they left off, they can
+give you the `program_data.json` file in their latest run's folder, after which you can run
+the following:
+
+```sh
+python . --prev-file /path/to/that/program_data.json
+```
+
 Use the `--help` flag to get help (`python . --help`). Here are the options at the time of writing:
 ```
  python . --help
-usage: data-collection [-h] [--config-file CONFIG_FILE] [--output-dir OUTPUT_DIR] [--env-file ENV_FILE] [--verbose] [--silent] [--overwrite] [--recover]
-                       [--praw-log {info,debug,warn,error}] [--terminal]
+usage: . [-h] [--config-file CONFIG_FILE] [--output-dir OUTPUT_DIR] [--env-file ENV_FILE] [--verbose] [--silent] [--overwrite] [--prev-file PREV_FILE]
+         [--praw-log {info,debug,warn,error}] [--port PORT]
 
 The Gems Reddit Data collector 9000 turdo
 
@@ -77,10 +85,11 @@ options:
   --verbose, -v         will print all logging to screen
   --silent              will log only errors
   --overwrite, -o       if exsting files should be overwritten
-  --recover, -r         if we should recover from a existing file
-  --praw-log {info,debug,warn,error}, -p {info,debug,warn,error}
+  --prev-file PREV_FILE
+                        Get number of hits and misses from this file instead of looking at previous runs
+  --praw-log {info,debug,warn,error}, -P {info,debug,warn,error}
                         Log level for PRAW output
-  --terminal            Run only in the terminal, instead of showing the web dashboard
+  --port PORT, -p PORT  Port for the server to listen on
 ```
 
 ## Running the web dashboard

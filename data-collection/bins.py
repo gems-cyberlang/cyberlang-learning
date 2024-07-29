@@ -235,7 +235,7 @@ class BinBin(Generic[T], AbstractBin):
         return any(bin.needed > 0 for bin in self._remaining)
 
 
-class TimeRange(BinBin):
+class TimeRange(BinBin[PermBin]):
     """For keeping track of work done in a time range"""
 
     def __init__(

@@ -1,6 +1,8 @@
 import csv
+import datetime
 import json
 import logging
+from typing import Optional
 import numpy as np
 import os
 import praw
@@ -66,6 +68,7 @@ class gems_runner:
         client_id: str,
         reddit_secret: str,
         output_dir: str,
+        prev_file: Optional[str],
         log_level: int,
         praw_log_level: int,
         port: int,
@@ -81,24 +84,7 @@ class gems_runner:
         if not os.path.isdir(output_dir):
             os.mkdir(output_dir)  # make output directory if it dose not exits
 
-        # Load data on previous runs
-        prev_runs = util.get_runs()
-        prev_run_nums = sorted(list(prev_runs.keys()))
-        if len(prev_run_nums) == 0:
-            # This is the first run
-            curr_run = 0
-        else:
-            assert len(prev_run_nums) == max(prev_run_nums) + 1, "Missing run detected"
-            curr_run = len(prev_run_nums)
-            for run_path in prev_runs.values():
-                comments = util.load_comments(run_path)
-                comments[ID].apply(
-                    lambda id: self.time_ranges.notify_requested(id, True)
-                )
-                del comments
-                misses = util.load_misses(run_path)
-                for id in misses:
-                    self.time_ranges.notify_requested(id, False)
+        curr_run = self.load_prev_runs(prev_file)
 
         self.run_dir = os.path.join(output_dir, f"run_{curr_run}")
         """Where all the data for this run goes"""
@@ -135,6 +121,65 @@ class gems_runner:
         self.sel.register(server_sock, selectors.EVENT_READ, False)
 
         self.logger.info("init complete")
+
+    def load_prev_runs(self, prev_file: Optional[str]):
+        """
+        Load previous runs.
+
+        If prev_file is given, loads the number of hits and misses for each bin from
+        there. Otherwise, loads all previous runs to get the same info. The latter
+        is less dangerous in case the bins change.
+        Returns the current run number.
+        """
+        if prev_file is not None:
+            self.logger.debug(f"Loading previous hits/misses from {prev_file}")
+            with open(prev_file) as f:
+                prev_data = json.load(f)
+                for start_date, data in prev_data["time_ranges"].items():
+                    start_date = datetime.date.fromisoformat(start_date)
+                    try:
+                        time_bin = next(
+                            bin
+                            for bin in self.time_ranges.bins
+                            if bin.start_date == start_date
+                        )
+                    except StopIteration:
+                        raise Exception(
+                            f"Date {start_date} not found in current bins when loading from previous program_data.json"
+                        )
+                    hits = data.get("hits", [])
+                    misses = data.get("misses", [])
+                    if len(time_bin.bins) != len(hits) or len(time_bin.bins) != len(
+                        misses
+                    ):
+                        raise Exception(
+                            f"Expected {len(time_bin.bins)} hits and misses"
+                            f", program data for {start_date} contained"
+                            f" {len(hits)} hits and {len(misses)} misses"
+                        )
+                    for bin, num_hits, num_misses in zip(time_bin.bins, hits, misses):
+                        # todo modifying private fields sucks but I don't care at the moment
+                        bin._hits += num_hits
+                        bin._misses += num_misses
+            return 0
+
+        prev_runs = util.get_runs()
+        prev_run_nums = sorted(list(prev_runs.keys()))
+        if len(prev_run_nums) == 0:
+            # This is the first run
+            return 0
+        else:
+            assert len(prev_run_nums) == max(prev_run_nums) + 1, "Missing run detected"
+            for run_path in prev_runs.values():
+                comments = util.load_comments(run_path)
+                comments[ID].apply(
+                    lambda id: self.time_ranges.notify_requested(id, True)
+                )
+                del comments
+                misses = util.load_misses(run_path)
+                for id in misses:
+                    self.time_ranges.notify_requested(id, False)
+            return len(prev_run_nums)
 
     def accept(self, sock: socket.socket):
         """Accept a new connection"""
@@ -341,11 +386,20 @@ class gems_runner:
         self.main_csv_f.close()
         self.missed_comments_file.close()
 
-        program_data = {"timestamp": self.timestamp}
+        program_data = {
+            "timestamp": self.timestamp,
+            "time_ranges": {
+                str(time_range.start_date): {
+                    "hits": [bin.hits for bin in time_range.bins],
+                    "misses": [bin.misses for bin in time_range.bins],
+                }
+                for time_range in self.time_ranges.bins
+            },
+        }
         with open(
             os.path.join(self.run_dir, PROGRAM_DATA_FILE_NAME), "w"
         ) as program_data_f:
-            json.dump(program_data, program_data_f)
+            json.dump(program_data, program_data_f, indent=2)
 
         for fd in list(self.sel.get_map()):
             key = self.sel.get_key(fd)
