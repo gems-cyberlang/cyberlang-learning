@@ -1,13 +1,11 @@
-import datetime
 from dotenv import load_dotenv
 import os
 import logging
 import argparse
 import sys
 from alive_progress import alive_bar
-import yaml
 
-from bins import TimeRange
+from config import Config
 from runner import gems_runner
 
 
@@ -65,37 +63,7 @@ parser.add_argument(
 
 args = parser.parse_args()
 
-config = yaml.safe_load(open(args.config_file))
-time_step: int = config["timeStep"]
-"""How many months long each time range is"""
-time_ranges_raw: list[dict] = config["timeRanges"]
-time_ranges = []
-start_time: datetime.date = config["timeStart"]
-for i, time_range in enumerate(time_ranges_raw):
-    start_id = int(time_range["start"], 36)
-    if "end" in time_range:
-        end_id = int(time_range["end"], 36)
-    elif i + 1 < len(time_ranges_raw):
-        end_id = int(time_ranges_raw[i + 1]["start"], 36)
-    else:
-        raise AssertionError(
-            f"An end ID should've been given for time range {time_range}"
-        )
-    prev_time = start_time
-    year = start_time.year + (start_time.month + time_step) // 12
-    month = (start_time.month + time_step) % 12
-    start_time = start_time.replace(year=year, month=month)
-    time_ranges.append(
-        TimeRange(
-            start_date=prev_time,
-            end_date=start_time,
-            start_id=start_id,
-            end_id=end_id,
-            min_comments=time_range["min"],
-        )
-    )
-
-print(time_ranges)
+config = Config.load(args.config_file)
 
 # Load env
 if not load_dotenv(args.env_file):
@@ -137,7 +105,7 @@ else:
     output_dir = args.output_dir
 
 runner = gems_runner(
-    time_ranges,
+    config,
     client_id,
     reddit_secret,
     output_dir=output_dir,

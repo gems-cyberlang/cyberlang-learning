@@ -28,7 +28,7 @@ handler.setLevel(logging.DEBUG)
 logger.addHandler(handler)
 
 parser = argparse.ArgumentParser(
-    description="The Gems Reddit Data collector 9000 turdo"
+    description="Find IDs at the border of some time ranges to generate a config.yaml"
 )
 parser.add_argument("time_first", help="Start of first time range")
 parser.add_argument("time_last", help="End of last time range")

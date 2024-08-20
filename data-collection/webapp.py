@@ -9,7 +9,7 @@ import streamlit as st
 logger = logging.Logger("dashboard")
 
 parser = argparse.ArgumentParser(
-    description="The Gems Reddit Data collector 9000 turdo"
+    description="Web dashboard for data collector"
 )
 parser.add_argument(
     "--port",

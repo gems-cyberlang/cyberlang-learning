@@ -3,17 +3,18 @@ import datetime
 import json
 import logging
 from typing import Optional
-import numpy as np
 import os
 import praw
 import praw.models
 import praw.exceptions
 import selectors
+import shutil
 import signal
 import socket
 import time
 
-from bins import BinBinBin, TimeRange
+from bins import BinBinBin
+from config import CONFIG_FILE_NAME, Config
 import util
 from util import (
     AUTHOR_ID,
@@ -64,7 +65,7 @@ class ProtectedBlock:
 class gems_runner:
     def __init__(
         self,
-        time_ranges: list[TimeRange],
+        config: Config,
         client_id: str,
         reddit_secret: str,
         output_dir: str,
@@ -76,7 +77,7 @@ class gems_runner:
         self.output_dir = output_dir
         self.client_id = client_id
         self.reddit_secret = reddit_secret
-        self.time_ranges = BinBinBin(time_ranges)
+        self.time_ranges = BinBinBin(config.time_ranges)
         self.timestamp = get_formatted_time()
         self.sel = selectors.DefaultSelector()
 
@@ -105,6 +106,11 @@ class gems_runner:
         missed_path = os.path.join(self.run_dir, MISSED_FILE_NAME)
         self.missed_comments_file = open(missed_path, "w")
         """Store IDs of comments that Reddit didn't return any info for"""
+
+        # Store the config for each run so that we can ensure that new runs are
+        # compatible with previous ones
+        # TODO actually check that new runs are compatible with previous runs
+        shutil.copyfile(config.path, os.path.join(self.run_dir, CONFIG_FILE_NAME))
 
         # Start reddit
         self.reddit = praw.Reddit(

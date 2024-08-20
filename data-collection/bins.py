@@ -182,7 +182,7 @@ class BinBin(Generic[T], AbstractBin):
         # TODO actually prioritize bins that haven't gotten the minimum number of comments yet
 
         # Number of IDs to request from each remaining bin
-        num_ids = defaultdict(lambda: 0)
+        num_ids: dict[T, int] = defaultdict(lambda: 0)
 
         def needed(bin: T):
             if any_needy:
@@ -281,6 +281,11 @@ class TimeRange(BinBin[PermBin]):
     @property
     def end_id(self):
         return self._end_id
+
+    def copy(self) -> "TimeRange":
+        return TimeRange(
+            self.start_date, self.end_date, self.start_id, self.end_id, self.min
+        )
 
     def __repr__(self):
         return f"TimeRange(start_date={self.start_date}, min={self.min}, hits={self.hits}, misses={self.misses})"
