@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from collections import defaultdict, deque
 import datetime
+import functools
 import itertools
 import numpy as np
 from typing import Generic, Optional, TypeVar
@@ -235,6 +236,7 @@ class BinBin(Generic[T], AbstractBin):
         return any(bin.needed > 0 for bin in self._remaining)
 
 
+@functools.total_ordering
 class TimeRange(BinBin[PermBin]):
     """For keeping track of work done in a time range"""
 
@@ -282,6 +284,12 @@ class TimeRange(BinBin[PermBin]):
     def end_id(self):
         return self._end_id
 
+    def __lt__(self, other: "TimeRange"):
+        return self.start_id < other.start_id
+
+    def __eq__(self, other: "TimeRange"):
+        return self.start_id == other.start_id and self.end_id == other.end_id
+
     def copy(self) -> "TimeRange":
         return TimeRange(
             self.start_date, self.end_date, self.start_id, self.end_id, self.min
@@ -289,6 +297,9 @@ class TimeRange(BinBin[PermBin]):
 
     def __repr__(self):
         return f"TimeRange(start_date={self.start_date}, min={self.min}, hits={self.hits}, misses={self.misses})"
+
+    def __hash__(self):
+        return hash(self.start_id)
 
 
 U = TypeVar("U", bound=BinBin)
