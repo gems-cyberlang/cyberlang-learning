@@ -9,7 +9,7 @@ import logging
 from typing import Optional
 import util
 
-NOT_THIS_FUCKING_ID_AGAIN = {int("f22fgrh", 36), int("c3ctzsq", 36)}
+NOT_THIS_FUCKING_ID_AGAIN = {int("c3ctzso", 36), int("c3ctzsq", 36), int("f22fgrh", 36)}
 
 reddit = util.init_reddit()
 
