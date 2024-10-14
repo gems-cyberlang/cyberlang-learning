@@ -162,6 +162,7 @@ cython_debug/
 #.idea/
 
 config.ini
+.devcontainer/wireguard-conf/wg_confs
 
 .vscode/
 
