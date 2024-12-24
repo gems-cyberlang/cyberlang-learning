@@ -7,6 +7,7 @@ import os
 import praw
 import praw.models
 import praw.exceptions
+import prawcore
 import selectors
 import signal
 import socket
@@ -280,6 +281,11 @@ class gems_runner:
                 path="api/info/",
                 params={"id": ",".join("t1_" + id for id in ids)},
             )
+        except prawcore.exception.ServerError as e:
+            self.logger.error(f"Prawcore error: "{e})
+            self.logger.error(f"Batch {i} of size {REQUEST_PER_CALL}")
+            self.logger.error("Skipping to next batch")
+            return
         except praw.exceptions.PRAWException as e:
             self.logger.error(f"Praw error in batch {self.req_num}: {e}")
             return
