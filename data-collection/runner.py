@@ -281,10 +281,8 @@ class gems_runner:
                 path="api/info/",
                 params={"id": ",".join("t1_" + id for id in ids)},
             )
-        except prawcore.exception.ServerError as e:
-            self.logger.error(f"Prawcore error: "{e})
-            self.logger.error(f"Batch {i} of size {REQUEST_PER_CALL}")
-            self.logger.error("Skipping to next batch")
+        except prawcore.exceptions.ServerError as e:
+            self.logger.error(f"Prawcore error, skipping batch {self.req_num}: {e}")
             return
         except praw.exceptions.PRAWException as e:
             self.logger.error(f"Praw error in batch {self.req_num}: {e}")
