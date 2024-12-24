@@ -10,7 +10,10 @@ import re
 import sys
 from typing import Any, Optional
 
-COMMENTS_FILE_NAME = "comments.csv"
+SQLITE_DB_NAME = "data.db"
+COMMENTS_TABLE = "comments"
+MISSES_TABLE = "misses"
+
 MISSED_FILE_NAME = "missed-ids.txt"
 
 AUTOMOD_ID = "6l4z3"

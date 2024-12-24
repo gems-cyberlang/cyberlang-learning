@@ -43,10 +43,6 @@ parser.add_argument(
     help="if exsting files should be overwritten",
 )
 parser.add_argument(
-    "--prev-file",
-    help="Get number of hits and misses from this file instead of looking at previous runs",
-)
-parser.add_argument(
     "--praw-log",
     "-P",
     help="Log level for PRAW output",
@@ -109,7 +105,6 @@ runner = gems_runner(
     client_id,
     reddit_secret,
     output_dir=output_dir,
-    prev_file=args.prev_file,
     log_level=log_level,
     praw_log_level=praw_log_level,
     port=args.port,

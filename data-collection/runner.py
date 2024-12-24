@@ -11,6 +11,7 @@ import selectors
 import shutil
 import signal
 import socket
+import sqlite3
 import time
 
 from bins import BinBinBin
@@ -20,9 +21,10 @@ from util import (
     AUTHOR_ID,
     AUTOMOD_ID,
     COMMENT_COLS,
-    COMMENTS_FILE_NAME,
+    COMMENTS_TABLE,
+    MISSES_TABLE,
+    SQLITE_DB_NAME,
     ID,
-    MISSED_FILE_NAME,
 )
 
 USER_AGENT = "GEMSTONE CYBERLAND RESEARCH"
@@ -69,7 +71,6 @@ class gems_runner:
         client_id: str,
         reddit_secret: str,
         output_dir: str,
-        prev_file: Optional[str],
         log_level: int,
         praw_log_level: int,
         port: int,
@@ -85,7 +86,7 @@ class gems_runner:
         if not os.path.isdir(output_dir):
             os.mkdir(output_dir)  # make output directory if it dose not exits
 
-        curr_run = self.load_prev_runs(prev_file)
+        curr_run = self.curr_run_num()
 
         self.run_dir = os.path.join(output_dir, f"run_{curr_run}")
         """Where all the data for this run goes"""
@@ -95,22 +96,12 @@ class gems_runner:
         self.logger = self._init_logging("gems_runner", log_level, praw_log_level)
         self.logger.info("Logging started")
 
-        # Come back and fix this
-        # TODO wait fix what?
-        comments_path = os.path.join(self.run_dir, COMMENTS_FILE_NAME)
-
-        self.main_csv_f = open(comments_path, "w")
-        self.main_csv = csv.writer(self.main_csv_f)
-        self.main_csv.writerow(COMMENT_COLS)
-
-        missed_path = os.path.join(self.run_dir, MISSED_FILE_NAME)
-        self.missed_comments_file = open(missed_path, "w")
-        """Store IDs of comments that Reddit didn't return any info for"""
-
-        # Store the config for each run so that we can ensure that new runs are
-        # compatible with previous ones
-        # TODO actually check that new runs are compatible with previous runs
-        shutil.copyfile(config.path, os.path.join(self.run_dir, CONFIG_FILE_NAME))
+        self.conn = sqlite3.connect(os.path.join(output_dir, SQLITE_DB_NAME))
+        self.cur = self.conn.cursor()
+        self.cur.execute(
+            f"CREATE TABLE IF NOT EXISTS comments({','.join(COMMENT_COLS)})"
+        )
+        self.cur.execute(f"CREATE TABLE IF NOT EXISTS misses(id)")
 
         # Start reddit
         self.reddit = praw.Reddit(
@@ -128,46 +119,8 @@ class gems_runner:
 
         self.logger.info("init complete")
 
-    def load_prev_runs(self, prev_file: Optional[str]):
-        """
-        Load previous runs.
-
-        If prev_file is given, loads the number of hits and misses for each bin from
-        there. Otherwise, loads all previous runs to get the same info. The latter
-        is less dangerous in case the bins change.
-        Returns the current run number.
-        """
-        if prev_file is not None:
-            self.logger.debug(f"Loading previous hits/misses from {prev_file}")
-            with open(prev_file) as f:
-                prev_data = json.load(f)
-                for start_date, data in prev_data["time_ranges"].items():
-                    start_date = datetime.date.fromisoformat(start_date)
-                    try:
-                        time_bin = next(
-                            bin
-                            for bin in self.time_ranges.bins
-                            if bin.start_date == start_date
-                        )
-                    except StopIteration:
-                        raise Exception(
-                            f"Date {start_date} not found in current bins when loading from previous program_data.json"
-                        )
-                    hits = data.get("hits", [])
-                    misses = data.get("misses", [])
-                    if len(time_bin.bins) != len(hits) or len(time_bin.bins) != len(
-                        misses
-                    ):
-                        raise Exception(
-                            f"Expected {len(time_bin.bins)} hits and misses"
-                            f", program data for {start_date} contained"
-                            f" {len(hits)} hits and {len(misses)} misses"
-                        )
-                    for bin, num_hits, num_misses in zip(time_bin.bins, hits, misses):
-                        # todo modifying private fields sucks but I don't care at the moment
-                        bin._hits += num_hits
-                        bin._misses += num_misses
-            return 0
+    def curr_run_num(self):
+        """Get the current run number."""
 
         prev_runs = util.get_runs()
         prev_run_nums = sorted(list(prev_runs.keys()))
@@ -176,15 +129,6 @@ class gems_runner:
             return 0
         else:
             assert len(prev_run_nums) == max(prev_run_nums) + 1, "Missing run detected"
-            for run_path in prev_runs.values():
-                comments = util.load_comments(run_path)
-                comments[ID].apply(
-                    lambda id: self.time_ranges.notify_requested(id, True)
-                )
-                del comments
-                misses = util.load_misses(run_path)
-                for id in misses:
-                    self.time_ranges.notify_requested(id, False)
             return len(prev_run_nums)
 
     def accept(self, sock: socket.socket):
@@ -287,7 +231,6 @@ class gems_runner:
         comments = ret["data"]["children"]
 
         misses = set(id_ints)
-        rows = []
         for comment in comments:
             try:
                 data = comment["data"]
@@ -306,6 +249,7 @@ class gems_runner:
                     # Consider a deleted comment a miss
                     self.logger.info(f"Comment {id} was {body}")
                     continue
+
                 fields = [
                     id,
                     int(data["created_utc"]),
@@ -315,26 +259,30 @@ class gems_runner:
                     data["link_id"],
                     data["ups"],
                     data["downs"],
-                    util.multiline_to_csv(body),
+                    body,
                 ]
-                rows.append(fields)
                 for col_name, field in zip(COMMENT_COLS, fields):
                     assert field is not None, col_name
                     if col_name != AUTHOR_ID:
                         assert field != "", col_name
+
                 id_int = int(id, 36)
                 self.time_ranges.notify_requested(id_int, True)
+                self.cur.execute(
+                    f"INSERT INTO {COMMENTS_TABLE} VALUES({','.join(['?'] * len(fields))})",
+                    fields,
+                )
+                self.conn.commit()
                 misses.remove(id_int)
             except:
                 raise Exception(f"Got exception while processing {comment}")
 
-        # We write these at the end to avoid writing some rows and then having to error
-        self.main_csv.writerows(rows)
         for id in misses:
             self.time_ranges.notify_requested(id, False)
-            self.missed_comments_file.write(f"{util.to_b36(id)}\n")
-
-        self.main_csv_f.flush()
+            self.cur.execute(
+                f"INSERT INTO {MISSES_TABLE} VALUES(?)", (util.to_b36(id),)
+            )
+            self.conn.commit()
 
         self.logger.debug(f"Completed group {i} of size {REQUEST_PER_CALL}")
 
@@ -389,15 +337,15 @@ class gems_runner:
 
     def close(self):
         """Closes all open files."""
-        self.main_csv_f.close()
-        self.missed_comments_file.close()
+        self.cur.close()
+        self.conn.close()
 
         program_data = {
             "timestamp": self.timestamp,
             "time_ranges": {
                 str(time_range.start_date): {
-                    "hits": [bin.hits for bin in time_range.bins],
-                    "misses": [bin.misses for bin in time_range.bins],
+                    "hits": time_range.hits,
+                    "misses": time_range.misses,
                 }
                 for time_range in self.time_ranges.bins
             },
