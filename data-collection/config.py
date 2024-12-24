@@ -1,13 +1,23 @@
 """For loading the data collector's config"""
 
-from bins import TimeRange
-
+from dataclasses import dataclass
 import datetime
 import yaml
 
 
 CONFIG_FILE_NAME = "config.yaml"
 
+
+@dataclass
+class TimeRange:
+    start_id: int
+    end_id: int
+    start_date: datetime.date
+    """Only used for displaying data"""
+    end_date: datetime.date
+    """Only used for displaying data"""
+    min_comments: int
+    """Stop when we've gotten these many comments"""
 
 class Config:
     def __init__(
@@ -20,7 +30,7 @@ class Config:
         self.start_date = start_date
         self.time_step = time_step
         """How many months long each time range is"""
-        self._time_ranges = time_ranges
+        self.time_ranges = time_ranges
         self.path = path
         """Path to the config file"""
 
@@ -58,7 +68,3 @@ class Config:
             )
 
         return Config(start_date, time_step, time_ranges, path)
-
-    @property
-    def time_ranges(self) -> list[TimeRange]:
-        return [time_range.copy() for time_range in self._time_ranges]

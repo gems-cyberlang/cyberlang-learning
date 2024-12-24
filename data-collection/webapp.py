@@ -8,9 +8,7 @@ import streamlit as st
 
 logger = logging.Logger("dashboard")
 
-parser = argparse.ArgumentParser(
-    description="Web dashboard for data collector"
-)
+parser = argparse.ArgumentParser(description="Web dashboard for data collector")
 parser.add_argument(
     "--port",
     "-p",
@@ -31,10 +29,12 @@ hits_graph = col1_elems.empty()
 misses_graph = col1_elems.empty()
 
 col2_elems = col2.container()
+percent_graph = col2_elems.empty()
 hit_rate_graph = col2_elems.empty()
 
+
 def read(conn: socket.socket):
-    data = conn.recv(1024)
+    data = conn.recv(2048)
     if not data:
         logger.error(f"Closing {conn} (reason: got empty message)")
         sel.unregister(conn)
@@ -49,8 +49,10 @@ def read(conn: socket.socket):
 def draw_graph(csv: str):
     df = pd.read_csv(StringIO(csv))
     df["Hit rate"] = df["Hits"] / (df["Hits"] + df["Misses"])
+    df["Percent"] = df["Hits"] / df["Total"]
     hits_graph.bar_chart(df, x="Date", y="Hits")
     misses_graph.bar_chart(df, x="Date", y="Misses")
+    percent_graph.bar_chart(df, x="Date", y="Percent")
     hit_rate_graph.bar_chart(df, x="Date", y="Hit rate")
 
 

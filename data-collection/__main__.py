@@ -110,11 +110,16 @@ runner = gems_runner(
     port=args.port,
 )
 
+
+def curr_needed():
+    return sum(bin.needed() for bin in runner.time_ranges)
+
+
 try:
-    total_needed = runner.time_ranges.needed
+    total_needed = curr_needed()
     with alive_bar(total=total_needed, manual=True) as pbar:
         while runner.run_step():
-            pbar(1 - runner.time_ranges.needed / total_needed)
+            pbar(1 - curr_needed() / total_needed)
     print("Done!")
 finally:
     runner.close()

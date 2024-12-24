@@ -8,6 +8,7 @@ import praw
 import praw.models
 import re
 import sys
+import sqlite3
 from typing import Any, Optional
 
 SQLITE_DB_NAME = "data.db"
@@ -16,8 +17,8 @@ MISSES_TABLE = "misses"
 
 MISSED_FILE_NAME = "missed-ids.txt"
 
-AUTOMOD_ID = "6l4z3"
-"""ID of automod user (base 36, not int)"""
+AUTOMOD_ID = int("6l4z3", 36)
+"""ID of automod user as integer"""
 
 _curr_dir = os.path.dirname(__file__)
 
@@ -38,6 +39,9 @@ def get_runs() -> dict[int, str]:
         for run_dir in glob("run_*", root_dir=out_dir)
     }
 
+def create_db_conn() -> sqlite3.Connection:
+    # TODO Create a connection to a Postgres database instead
+    return sqlite3.connect("out/data.db")
 
 def load_comments(*paths: str) -> pd.DataFrame:
     """
@@ -172,6 +176,9 @@ UPVOTES = "upvotes"
 DOWNVOTES = "downvotes"
 """Column for number of downvotes"""
 BODY = "body"
+COMMENT_COLS_TYPES = [
+    (ID, "bigint")
+]
 COMMENT_COLS = [
     ID,
     TIME,
