@@ -135,7 +135,7 @@ SR_NAME = "sr_name"
 """Column for subreddit name ('r/foo')"""
 AUTHOR_ID = "author_id"
 """Column for the ID (integer) of the author of the comment"""
-PARENT_FULLNAME = "parent_fullname"
+PARENT_ID = "parent_id"
 """Column for the ID (integer) of the parent of the comment"""
 POST_ID = "post_id"
 """Column for the post the comment was submitted to"""
@@ -149,7 +149,7 @@ COMMENT_COLS = [
     TIME,
     SR_NAME,
     AUTHOR_ID,
-    PARENT_FULLNAME,
+    PARENT_ID,
     POST_ID,
     UPVOTES,
     DOWNVOTES,
