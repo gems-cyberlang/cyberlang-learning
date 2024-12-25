@@ -2,13 +2,15 @@
 
 from dataclasses import dataclass
 import datetime
+import functools
 import yaml
 
 
 CONFIG_FILE_NAME = "config.yaml"
 
 
-@dataclass
+@functools.total_ordering
+@dataclass(frozen=True)
 class TimeRange:
     start_id: int
     end_id: int
@@ -19,20 +21,19 @@ class TimeRange:
     min_comments: int
     """Stop when we've gotten these many comments"""
 
+    def __lt__(self, other: "TimeRange"):
+        return self.start_id < other.start_id
+
+    def __eq__(self, other: "TimeRange"):
+        return self.start_id == other.start_id and self.end_id == other.end_id
+
+
+@dataclass(frozen=True)
 class Config:
-    def __init__(
-        self,
-        start_date: datetime.date,
-        time_step: int,
-        time_ranges: list[TimeRange],
-        path: str,
-    ):
-        self.start_date = start_date
-        self.time_step = time_step
-        """How many months long each time range is"""
-        self.time_ranges = time_ranges
-        self.path = path
-        """Path to the config file"""
+    start_date: datetime.date
+    time_step: int
+    """How many months long each time range is"""
+    time_ranges: list[TimeRange]
 
     @staticmethod
     def load(path: str) -> "Config":
@@ -67,4 +68,4 @@ class Config:
                 )
             )
 
-        return Config(start_date, time_step, time_ranges, path)
+        return Config(start_date, time_step, time_ranges)

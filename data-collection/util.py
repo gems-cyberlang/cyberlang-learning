@@ -11,19 +11,19 @@ import sys
 import sqlite3
 from typing import Any, Optional
 
-SQLITE_DB_NAME = "data.db"
-COMMENTS_TABLE = "comments"
-MISSES_TABLE = "misses"
-
-MISSED_FILE_NAME = "missed-ids.txt"
-
-AUTOMOD_ID = int("6l4z3", 36)
-"""ID of automod user as integer"""
-
 _curr_dir = os.path.dirname(__file__)
 
 out_dir = os.path.join(_curr_dir, "out")
 """The directory in which all the runs are"""
+
+
+SQLITE_DB_FILE = os.path.join(out_dir, "data.db")
+SQLITE_URI = f"sqlite:///{SQLITE_DB_FILE}"
+COMMENTS_TABLE = "comments"
+MISSES_TABLE = "misses"
+
+AUTOMOD_ID = int("6l4z3", 36)
+"""ID of automod user as integer"""
 
 
 def to_b36(id: int) -> str:
@@ -39,52 +39,20 @@ def get_runs() -> dict[int, str]:
         for run_dir in glob("run_*", root_dir=out_dir)
     }
 
+
 def create_db_conn() -> sqlite3.Connection:
     # TODO Create a connection to a Postgres database instead
-    return sqlite3.connect("out/data.db")
-
-def load_comments(*paths: str) -> pd.DataFrame:
-    """
-    Load multiple CSVs with comment data into a single dataframe
-
-    For each path, if it's a file, load that file. If it's a folder, load "folder/comments.csv"
-    """
-    dfs = []
-    for path in paths:
-        if os.path.isdir(path):
-            path = os.path.join(path, COMMENTS_FILE_NAME)
-        if not os.path.exists(path):
-            raise FileNotFoundError(path)
-
-        dfs.append(pd.read_csv(path))
-
-    df = pd.concat(dfs, axis=0, ignore_index=True)
-    df[BODY] = df[BODY].apply(str)
-    df[ID] = df[ID].apply(lambda id: int(str(id), 36))
-    df[TIME] = df[TIME].map(lambda ts: datetime.fromtimestamp(ts))
-    df = sort_comments(df)
-    return df
+    return sqlite3.connect(SQLITE_DB_FILE)
 
 
-def sort_comments(df: pd.DataFrame) -> pd.DataFrame:
-    return df.sort_values([ID]).reset_index(drop=True)
+def load_data() -> tuple[pd.DataFrame, pd.Series]:
+    with create_db_conn() as conn:
+        df = pd.read_sql(f"SELECT * FROM {COMMENTS_TABLE} ORDER BY {ID}", conn)
+        df[BODY] = df[BODY].apply(str)
+        df[TIME] = df[TIME].map(lambda ts: datetime.fromtimestamp(ts))
 
-
-def load_misses(*paths: str) -> pd.Series:
-    """
-    Load files with list of missed IDs
-
-    For each path, if it's a file, load that file. If it's a folder, load "folder/missed-ids.txt"
-    """
-    misses = []
-    for path in paths:
-        if os.path.isdir(path):
-            path = os.path.join(path, MISSED_FILE_NAME)
-        if not os.path.exists(path):
-            raise FileNotFoundError(path)
-        with open(path, "r") as f:
-            misses.extend(int(id, 36) for id in f.readlines())
-    return pd.Series(misses).sort_values()
+        misses = pd.read_sql(f"SELECT * FROM {MISSES_TABLE} ORDER BY {ID}", conn)
+        return df, misses[ID]
 
 
 def init_reddit() -> praw.Reddit:
@@ -161,14 +129,14 @@ def multiline_to_csv(s: str) -> str:
 
 # Column names
 ID = "id"
-"""Column for comment ID"""
+"""Column for comment ID (integer)"""
 TIME = "time"
 SR_NAME = "sr_name"
 """Column for subreddit name ('r/foo')"""
 AUTHOR_ID = "author_id"
-"""Column for the ID of the author of the comment (e.g. abcdef)"""
+"""Column for the ID (integer) of the author of the comment"""
 PARENT_FULLNAME = "parent_fullname"
-"""Column for the fullname of the parent of the comment (e.g. t3_abcdef)"""
+"""Column for the ID (integer) of the parent of the comment"""
 POST_ID = "post_id"
 """Column for the post the comment was submitted to"""
 UPVOTES = "upvotes"
@@ -176,9 +144,6 @@ UPVOTES = "upvotes"
 DOWNVOTES = "downvotes"
 """Column for number of downvotes"""
 BODY = "body"
-COMMENT_COLS_TYPES = [
-    (ID, "bigint")
-]
 COMMENT_COLS = [
     ID,
     TIME,
@@ -192,7 +157,7 @@ COMMENT_COLS = [
 ]
 
 
-POST_COLS = ["id", "time", "subreddit", "author", "title", "body", "num_comments"]
+POST_COLS = [ID, TIME, SR_NAME, "author", "title", BODY, "num_comments"]
 
 
 def post_relevant_fields(post: praw.models.Submission):

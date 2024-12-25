@@ -2,6 +2,7 @@ from dataclasses import dataclass
 import json
 import logging
 from random import randint
+import random
 from typing import Optional
 import os
 import praw
@@ -22,7 +23,7 @@ from util import (
     COMMENT_COLS,
     COMMENTS_TABLE,
     MISSES_TABLE,
-    SQLITE_DB_NAME,
+    SQLITE_DB_FILE,
     ID,
 )
 
@@ -73,10 +74,6 @@ class TimeRangeWithHits:
         """Total number of comments in this time range"""
         return self.time_range.end_id - self.time_range.start_id
 
-    def percent(self) -> float:
-        """What percent of all the comments in this time range have been gotten?"""
-        return self.hits / self.total()
-
     def needed(self) -> int:
         return max(0, self.time_range.min_comments - self.hits)
 
@@ -121,7 +118,7 @@ class gems_runner:
         self.logger = self._init_logging("gems_runner", log_level, praw_log_level)
         self.logger.info("Logging started")
 
-        self.db_conn = sqlite3.connect(os.path.join(output_dir, SQLITE_DB_NAME))
+        self.db_conn = util.create_db_conn()
         cur = self.db_conn.cursor()
         cur.execute(f"CREATE TABLE IF NOT EXISTS comments({','.join(COMMENT_COLS)})")
         cur.execute(f"CREATE TABLE IF NOT EXISTS misses(id)")
@@ -347,27 +344,21 @@ class gems_runner:
         self.logger.debug(f"Completed group {self.req_num} of size {REQUEST_PER_CALL}")
 
     def get_next_ids(self) -> list[int]:
-        percents = [
-            (bin, bin.percent()) for bin in self.time_ranges if bin.needed() > 0
-        ]
-        percents.sort(key=lambda kv: kv[1])
-        max_percent = percents[-1][1]
+        bins = [bin for bin in self.time_ranges if bin.needed() > 0]
+        random.shuffle(bins)
+
+        per_bin, leftover = divmod(REQUEST_PER_CALL, len(bins))
 
         ids = []
-        for bin, percent in percents:
-            num_left = REQUEST_PER_CALL - len(ids)
-            if num_left == 0:
-                break
-            if percent < max_percent:
-                deficit = int((max_percent - percent) * bin.total())
-                deficit = min(num_left, deficit)
+        for i, bin in enumerate(bins):
+            if i == 0:
+                num_ids = per_bin + leftover
             else:
-                # If we got to the last bin, we must have leftover slots.
-                # For all of those remaining slots, get IDs from this time range
-                deficit = num_left
+                num_ids = per_bin
+
             # This doesn't account for there being no more comments to request,
             # but that's fine, given how many comments Reddit has
-            while deficit > 0:
+            while num_ids > 0:
                 id = randint(bin.time_range.start_id, bin.time_range.end_id)
                 cur = self.db_conn.execute(
                     f"SELECT {ID} FROM {COMMENTS_TABLE} WHERE {ID} = ?", (id,)
@@ -387,7 +378,7 @@ class gems_runner:
                 cur.close()
 
                 ids.append(id)
-                deficit -= 1
+                num_ids -= 1
         return ids
 
     def run_step(self) -> bool:
