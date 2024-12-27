@@ -182,16 +182,6 @@ class gems_runner:
 
         self.logger.warn(f"Got {data!r} from {conn}, I don't know what to do with it")
 
-    def create_err(self, err_msg: str, logger: logging.Logger):
-        """logs error and kills program
-
-        Args:
-            err_msg (str):
-            logger (logging.Logger):
-        """
-        logger.error("ERROR: " + err_msg)
-        exit(1)
-
     def _init_logging(
         self,
         logger_name: str,
