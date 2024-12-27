@@ -39,31 +39,6 @@ def get_formatted_time():
     return time.strftime("%Y-%m-%d-%H-%M-%S")
 
 
-class ProtectedBlock:
-    """
-    A context manager to protect a block from being interrupted by Ctrl+C.
-
-    Copied from https://stackoverflow.com/a/21919644.
-    """
-
-    def __enter__(self):
-        self.signal_received = None
-        self.old_handler = signal.signal(signal.SIGINT, self.handler)
-
-    def handler(self, sig, frame):
-        self.signal_received = (sig, frame)
-
-    def __exit__(self, _type, _value, _traceback):
-        signal.signal(signal.SIGINT, self.old_handler)
-        if self.signal_received is not None:
-            # We were interrupted at some point, time to die now
-            if callable(self.old_handler):
-                self.old_handler(*self.signal_received)
-            else:
-                # TODO should we even bother handling this?
-                exit(1)
-
-
 @dataclass
 class TimeRangeWithHits:
     time_range: TimeRange
@@ -393,8 +368,7 @@ class gems_runner:
             f"Requesting {len(next_ids)}: {','.join(map(util.to_b36, next_ids))}"
         )
 
-        with ProtectedBlock():
-            self.request_batch(next_ids)
+        self.request_batch(next_ids)
 
         # Send updates to dashboard client(s)
         header = b"Date,Min,Hits,Misses,Total"
