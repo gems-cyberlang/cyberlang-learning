@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 import json
 import logging
-from random import randint
 import random
 from typing import Optional
 import os
@@ -10,9 +9,7 @@ import praw.models
 import praw.exceptions
 import prawcore
 import selectors
-import signal
 import socket
-import sqlite3
 import time
 
 from config import Config, TimeRange
@@ -319,41 +316,33 @@ class gems_runner:
         self.logger.debug(f"Completed group {self.req_num} of size {REQUEST_PER_CALL}")
 
     def get_next_ids(self) -> list[int]:
-        bins = [bin for bin in self.time_ranges if bin.needed() > 0]
-        random.shuffle(bins)
-
-        per_bin, leftover = divmod(REQUEST_PER_CALL, len(bins))
+        # Pick a bin and request 100 comments from it
+        # This doesn't account for there being no more comments to request,
+        # but that's fine, given how many comments Reddit has
+        bin = random.choice([bin for bin in self.time_ranges if bin.needed() > 0])
 
         ids = []
-        for i, bin in enumerate(bins):
-            if i == 0:
-                num_ids = per_bin + leftover
-            else:
-                num_ids = per_bin
-
-            # This doesn't account for there being no more comments to request,
-            # but that's fine, given how many comments Reddit has
-            while num_ids > 0:
-                id = randint(bin.time_range.start_id, bin.time_range.end_id)
-                cur = self.db_conn.execute(
-                    f"SELECT {ID} FROM {COMMENTS_TABLE} WHERE {ID} = ?", (id,)
-                )
-                if cur.fetchone():
-                    # We already have this comment
-                    cur.close()
-                    continue
+        while len(ids) < REQUEST_PER_CALL:
+            id = random.randint(bin.time_range.start_id, bin.time_range.end_id)
+            cur = self.db_conn.execute(
+                f"SELECT {ID} FROM {COMMENTS_TABLE} WHERE {ID} = ?", (id,)
+            )
+            if cur.fetchone():
+                # We already have this comment
                 cur.close()
-                cur = self.db_conn.execute(
-                    f"SELECT {ID} FROM {MISSES_TABLE} WHERE {ID} = ?", (id,)
-                )
-                if cur.fetchone():
-                    # We already tried (and failed) to get this comment
-                    cur.close()
-                    continue
+                continue
+            cur.close()
+            cur = self.db_conn.execute(
+                f"SELECT {ID} FROM {MISSES_TABLE} WHERE {ID} = ?", (id,)
+            )
+            if cur.fetchone():
+                # We already tried (and failed) to get this comment
                 cur.close()
+                continue
+            cur.close()
 
-                ids.append(id)
-                num_ids -= 1
+            ids.append(id)
+
         return ids
 
     def run_step(self) -> bool:
