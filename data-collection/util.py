@@ -157,25 +157,4 @@ COMMENT_COLS = [
 ]
 
 
-POST_COLS = [ID, TIME, SR_NAME, "author", "title", BODY, "num_comments"]
-
-
-def post_relevant_fields(post: praw.models.Submission):
-    """
-    Extract the relevant fields of a post, to be saved in a CSV
-    """
-    sr_match = re.search("r/([^/]+)", post.permalink)
-    if sr_match is None:
-        sr_name = post.permalink
-        print(f"Could not extract subreddit for post {post.id}", file=sys.stderr)
-    else:
-        sr_name = post.permalink[sr_match.start(1) : sr_match.end(1)]
-    return [
-        post.id,
-        int(post.created_utc),
-        sr_name,
-        post.author.name,
-        post.title,
-        multiline_to_csv(post.selftext),
-        post.num_comments,
-    ]
+POST_COLS = [ID, TIME, SR_NAME, AUTHOR_ID, "title", BODY, "num_comments"]

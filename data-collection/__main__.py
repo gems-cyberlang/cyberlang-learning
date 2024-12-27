@@ -6,7 +6,7 @@ import sys
 from alive_progress import alive_bar
 
 from config import Config
-from runner import gems_runner
+from post_collector import gems_runner
 
 
 curr_dir = os.path.dirname(__file__)
@@ -16,9 +16,7 @@ parser = argparse.ArgumentParser(
     description="The Gems Reddit Data collector 9000 turdo"
 )
 
-parser.add_argument(
-    "--config-file", "-c", type=str, default=os.path.join(curr_dir, "config.yaml")
-)
+parser.add_argument("query", help="What term to search for")
 parser.add_argument(
     "--output-dir",
     type=str,
@@ -37,12 +35,6 @@ parser.add_argument(
 )
 parser.add_argument("--silent", action="store_true", help="will log only errors")
 parser.add_argument(
-    "--overwrite",
-    "-o",
-    action="store_true",
-    help="if exsting files should be overwritten",
-)
-parser.add_argument(
     "--praw-log",
     "-P",
     help="Log level for PRAW output",
@@ -58,8 +50,6 @@ parser.add_argument(
 )
 
 args = parser.parse_args()
-
-config = Config.load(args.config_file)
 
 # Load env
 if not load_dotenv(args.env_file):
@@ -101,7 +91,7 @@ else:
     output_dir = args.output_dir
 
 runner = gems_runner(
-    config,
+    args.query,
     client_id,
     reddit_secret,
     output_dir=output_dir,
@@ -110,16 +100,8 @@ runner = gems_runner(
     port=args.port,
 )
 
-
-def curr_needed():
-    return sum(bin.needed() for bin in runner.time_ranges)
-
-
 try:
-    total_needed = curr_needed()
-    with alive_bar(total=total_needed, manual=True) as pbar:
-        while runner.run_step():
-            pbar(1 - curr_needed() / total_needed)
+    runner.search_posts()
     print("Done!")
 finally:
     runner.close()
