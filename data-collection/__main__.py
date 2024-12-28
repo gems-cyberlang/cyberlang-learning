@@ -49,13 +49,6 @@ parser.add_argument(
     choices=["info", "debug", "warn", "error"],
     default="warn",
 )
-parser.add_argument(
-    "--port",
-    "-p",
-    help="Port for the server to listen on",
-    default=1234,
-    type=int,
-)
 
 args = parser.parse_args()
 
@@ -107,7 +100,6 @@ runner = gems_runner(
     output_dir=output_dir,
     log_level=log_level,
     praw_log_level=praw_log_level,
-    port=args.port,
 )
 
 

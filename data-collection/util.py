@@ -11,6 +11,8 @@ import sys
 import sqlite3
 from typing import Any, Optional
 
+from config import TimeRange
+
 _curr_dir = os.path.dirname(__file__)
 
 out_dir = os.path.join(_curr_dir, "out")
@@ -53,6 +55,36 @@ def load_data() -> tuple[pd.DataFrame, pd.Series]:
 
         misses = pd.read_sql(f"SELECT * FROM {MISSES_TABLE} ORDER BY {ID}", conn)
         return df, misses[ID]
+
+
+def time_range_stats(
+    comments: pd.DataFrame, misses: pd.Series, time_ranges: list[TimeRange]
+) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "start_date": [time_range.start_date for time_range in time_ranges],
+            "end_date": [time_range.end_date for time_range in time_ranges],
+            "start_id": [time_range.start_id for time_range in time_ranges],
+            "end_id": [time_range.end_id for time_range in time_ranges],
+            "hits": [
+                len(
+                    comments[
+                        (time_range.start_id <= comments[ID])
+                        & (comments[ID] <= time_range.end_id)
+                    ]
+                )
+                for time_range in time_ranges
+            ],
+            "misses": [
+                len(
+                    misses[
+                        (time_range.start_id <= misses) & (misses <= time_range.end_id)
+                    ]
+                )
+                for time_range in time_ranges
+            ],
+        }
+    )
 
 
 def init_reddit() -> praw.Reddit:

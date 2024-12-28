@@ -8,8 +8,6 @@ import praw
 import praw.models
 import praw.exceptions
 import prawcore
-import selectors
-import socket
 import time
 
 from config import Config, TimeRange
@@ -20,7 +18,6 @@ from util import (
     COMMENT_COLS,
     COMMENTS_TABLE,
     MISSES_TABLE,
-    SQLITE_DB_FILE,
     ID,
 )
 
@@ -64,7 +61,6 @@ class gems_runner:
         output_dir: str,
         log_level: int,
         praw_log_level: int,
-        port: int,
     ) -> None:
         self.output_dir = output_dir
         self.client_id = client_id
@@ -74,7 +70,6 @@ class gems_runner:
             for time_range in config.time_ranges
         ]
         self.timestamp = get_formatted_time()
-        self.sel = selectors.DefaultSelector()
 
         # Open files and directores loading data from there
         if not os.path.isdir(output_dir):
@@ -107,13 +102,6 @@ class gems_runner:
             client_secret=self.reddit_secret,
             user_agent=USER_AGENT,
         )
-
-        server_sock = socket.socket()
-        server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        server_sock.bind(("localhost", port))
-        server_sock.listen(100)
-        server_sock.setblocking(False)
-        self.sel.register(server_sock, selectors.EVENT_READ, False)
 
         self.logger.info("init complete")
 
@@ -159,28 +147,6 @@ class gems_runner:
         self.logger.error(
             f"ID {util.to_b36(id)} ({hit_or_miss}) didn't fit into any bins"
         )
-
-    def accept(self, sock: socket.socket):
-        """Accept a new connection"""
-        conn, addr = sock.accept()
-        self.logger.info(f"Accepted connection from {addr}")
-        conn.setblocking(False)
-        self.sel.register(conn, selectors.EVENT_READ, True)
-
-    def read(self, conn: socket.socket):
-        """Receive a message from the dashboard. We're not actually using this yet,
-        but we might want to allow stopping the server from the dashboard at some point
-        """
-        try:
-            data = conn.recv(1)
-        except:
-            self.remove_conn(conn)
-            return
-        if not data:
-            self.remove_conn(conn)
-            return
-
-        self.logger.warn(f"Got {data!r} from {conn}, I don't know what to do with it")
 
     def _init_logging(
         self,
@@ -342,45 +308,13 @@ class gems_runner:
             )
             self.logger.info(", ".join(map(str, self.time_ranges)))
             return False
+
         next_ids = self.get_next_ids()
         self.logger.debug(
             f"Requesting {len(next_ids)}: {','.join(map(util.to_b36, next_ids))}"
         )
-
         self.request_batch(next_ids)
-
-        # Send updates to dashboard client(s)
-        header = b"Date,Min,Hits,Misses,Total"
-        rows = [
-            f"{bin.time_range.start_date},{bin.time_range.min_comments},{bin.hits},{bin.misses},{bin.total()}".encode()
-            for bin in self.time_ranges
-        ]
-        msg = header + b"\n" + b"\n".join(rows)
-        for fd in list(self.sel.get_map()):
-            key = self.sel.get_key(fd)
-            if key.data:  # Is a client socket, not the server socket
-                conn: socket.socket = key.fileobj  # type: ignore
-                try:
-                    conn.setblocking(False)
-                    conn.send(msg)
-                except:
-                    self.remove_conn(conn)
-
-        events = self.sel.select(0)
-        for key, _mask in events:
-            is_client = key.data
-            if is_client:
-                # This isn't necessary yet, but at some point, we might want to
-                # receive messages from the dashboard
-                self.read(key.fileobj)  # type: ignore
-            else:
-                self.accept(key.fileobj)  # type: ignore
         return True
-
-    def remove_conn(self, conn: socket.socket):
-        self.logger.info(f"Closing {conn}")
-        self.sel.unregister(conn)
-        conn.close()
 
     def close(self):
         """Closes all open files."""
@@ -400,7 +334,3 @@ class gems_runner:
             os.path.join(self.run_dir, PROGRAM_DATA_FILE_NAME), "w"
         ) as program_data_f:
             json.dump(program_data, program_data_f, indent=2)
-
-        for fd in list(self.sel.get_map()):
-            key = self.sel.get_key(fd)
-            self.remove_conn(key.fileobj)  # type: ignore

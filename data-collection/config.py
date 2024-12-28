@@ -3,10 +3,13 @@
 from dataclasses import dataclass
 import datetime
 import functools
+import os
 import yaml
 
 
 CONFIG_FILE_NAME = "config.yaml"
+
+_curr_dir = os.path.dirname(__file__)
 
 
 @functools.total_ordering
@@ -36,7 +39,7 @@ class Config:
     time_ranges: list[TimeRange]
 
     @staticmethod
-    def load(path: str) -> "Config":
+    def load(path: str = os.path.join(_curr_dir, CONFIG_FILE_NAME)) -> "Config":
         with open(path) as file:
             config = yaml.safe_load(file)
         time_step: int = config["timeStep"]
