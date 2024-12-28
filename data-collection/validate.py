@@ -71,9 +71,11 @@ def run_check(f: Callable, *args, **kwargs) -> list[str]:
     happy_msg="Found no duplicate comment IDs",
     error_msg="Found comments with duplicate IDs",
 )
-def duplicate_comments(df: pd.DataFrame) -> pd.DataFrame:
+def duplicate_comments(df: pd.DataFrame) -> list[str]:
     """Find comments that have the same ID"""
-    return df[df.duplicated(subset=[util.ID], keep=False)].map(util.to_b36)
+    return list(
+        df[util.ID][df.duplicated(subset=[util.ID], keep=False)].map(util.to_b36)
+    )
 
 
 @_check(

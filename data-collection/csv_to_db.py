@@ -2,7 +2,7 @@
 Take the comments.csv and missed-ids.txt files from runs from the old data
 collector and put them into the SQLite database.
 
-WARNING: This will overwrite your existing data.db
+This will append to your existing data
 """
 
 import os
@@ -27,9 +27,9 @@ for run_dir in glob("run_*", root_dir=out_dir):
     comments[POST_ID] = comments[POST_ID].map(
         lambda id: int(id.removeprefix("t3_"), 36)
     )
-    comments.to_sql(COMMENTS_TABLE, conn, if_exists="replace", index=False)
+    comments.to_sql(COMMENTS_TABLE, conn, if_exists="append", index=False)
 
     with open(os.path.join(run_dir, "missed-ids.txt"), "r") as f:
         misses = [int(id, 36) for id in f.readlines()]
         misses_df = pd.DataFrame({"id": misses})
-        misses_df.to_sql(MISSES_TABLE, conn, if_exists="replace", index=False)
+        misses_df.to_sql(MISSES_TABLE, conn, if_exists="append", index=False)
