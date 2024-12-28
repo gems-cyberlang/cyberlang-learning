@@ -29,11 +29,27 @@ def to_b36(id: int) -> str:
 
 
 def create_db_conn(db_file: Optional[str] = None) -> sqlite3.Connection:
-    """Connect to the given database (data.db if not given)"""
-    # TODO Create a connection to a Postgres database instead
+    """
+    Connect to the given database and create tables if they don't exist
+
+    TODO use Postgres instead
+
+    This creates two tables, `comments` and `misses`, if they don't exist already.
+    In both tables, `id` is set as the primary key so that they can't have duplicate IDs.
+
+    # Arguments
+    * `db_file`: The file in which the SQLite database lives (data.db if not given)
+    """
     if not db_file:
         db_file = SQLITE_DB_FILE
-    return sqlite3.connect(db_file)
+
+    conn = sqlite3.connect(db_file)
+    other_cols = ",".join(COMMENT_COLS[1:])
+    conn.execute(
+        f"CREATE TABLE IF NOT EXISTS {COMMENTS_TABLE}({ID} INTEGER PRIMARY KEY, {other_cols})"
+    )
+    conn.execute(f"CREATE TABLE IF NOT EXISTS {MISSES_TABLE}({ID} INTEGER PRIMARY KEY)")
+    return conn
 
 
 def load_data() -> tuple[pd.DataFrame, pd.Series]:

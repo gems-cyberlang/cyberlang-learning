@@ -20,7 +20,8 @@ for run_dir in glob("run_*", root_dir=out_dir):
     comments[AUTHOR_ID] = comments[AUTHOR_ID].map(
         lambda id: int(id, 36) if isinstance(id, str) else id
     )
-    comments[PARENT_ID] = comments["parent_fullname"].map(
+    comments = comments.rename(columns={"parent_fullname": PARENT_ID})
+    comments[PARENT_ID] = comments[PARENT_ID].map(
         lambda id: int(id.removeprefix("t1_"), 36)
     )
     comments[POST_ID] = comments[POST_ID].map(
@@ -31,4 +32,4 @@ for run_dir in glob("run_*", root_dir=out_dir):
     with open(os.path.join(run_dir, "missed-ids.txt"), "r") as f:
         misses = [int(id, 36) for id in f.readlines()]
         misses_df = pd.DataFrame({"id": misses})
-        misses_df.to_sql(MISSES_TABLE, conn, if_exists="replace")
+        misses_df.to_sql(MISSES_TABLE, conn, if_exists="replace", index=False)

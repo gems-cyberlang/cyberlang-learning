@@ -71,11 +71,6 @@ class gems_runner:
 
     def __enter__(self):
         self.db_conn = util.create_db_conn(self.db_file)
-        cur = self.db_conn.cursor()
-        cur.execute(f"CREATE TABLE IF NOT EXISTS comments({','.join(COMMENT_COLS)})")
-        cur.execute(f"CREATE TABLE IF NOT EXISTS misses(id)")
-        cur.close()
-
         self.update_time_ranges()
 
         self.req_num = 0
@@ -233,51 +228,28 @@ class gems_runner:
                         ), f"{col_name} was empty/none in comment {id_int}"
 
                 self.add_result(id_int, True)
+                # Because we set "id" to be the primary key, inserting duplicate comments
+                # isn't allowed.
+                # So we use INSERT OR IGNORE, but that ignores ALL conflicts, so it's a bit
+                # dangerous.
                 self.db_conn.execute(
-                    f"INSERT INTO {COMMENTS_TABLE} VALUES({','.join(['?'] * len(fields))})",
+                    f"INSERT OR IGNORE INTO {COMMENTS_TABLE} VALUES({','.join(['?'] * len(fields))})",
                     fields,
                 )
                 self.db_conn.commit()
                 misses.remove(id_int)
-            except:
-                raise Exception(f"Got exception while processing {comment}")
+            except Exception as e:
+                self.logger.error(f"Got exception while processing {comment}")
+                raise
 
         for id_int in misses:
             self.add_result(id_int, False)
-            self.db_conn.execute(f"INSERT INTO {MISSES_TABLE} VALUES(?)", (id_int,))
+            self.db_conn.execute(
+                f"INSERT OR IGNORE INTO {MISSES_TABLE} VALUES(?)", (id_int,)
+            )
             self.db_conn.commit()
 
         self.logger.debug(f"Completed group {self.req_num} of size {REQUEST_PER_CALL}")
-
-    def get_next_ids(self) -> list[int]:
-        # Pick a bin and request 100 comments from it
-        # This doesn't account for there being no more comments to request,
-        # but that's fine, given how many comments Reddit has
-        bin = random.choice([bin for bin in self.time_ranges if bin.needed() > 0])
-
-        ids = []
-        while len(ids) < REQUEST_PER_CALL:
-            id = random.randint(bin.time_range.start_id, bin.time_range.end_id)
-            cur = self.db_conn.execute(
-                f"SELECT {ID} FROM {COMMENTS_TABLE} WHERE {ID} = ?", (id,)
-            )
-            if cur.fetchone():
-                # We already have this comment
-                cur.close()
-                continue
-            cur.close()
-            cur = self.db_conn.execute(
-                f"SELECT {ID} FROM {MISSES_TABLE} WHERE {ID} = ?", (id,)
-            )
-            if cur.fetchone():
-                # We already tried (and failed) to get this comment
-                cur.close()
-                continue
-            cur.close()
-
-            ids.append(id)
-
-        return ids
 
     def run_step(self) -> bool:
         if all(bin.needed() == 0 for bin in self.time_ranges):
@@ -287,7 +259,12 @@ class gems_runner:
             self.logger.info(", ".join(map(str, self.time_ranges)))
             return False
 
-        next_ids = self.get_next_ids()
+        # Pick a bin and request 100 comments from it
+        next_bin = random.choice([bin for bin in self.time_ranges if bin.needed() > 0])
+        next_ids = [
+            random.randint(next_bin.time_range.start_id, next_bin.time_range.end_id)
+            for _ in range(REQUEST_PER_CALL)
+        ]
         self.logger.debug(
             f"Requesting {len(next_ids)}: {','.join(map(util.to_b36, next_ids))}"
         )

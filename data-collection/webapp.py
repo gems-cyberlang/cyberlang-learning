@@ -36,4 +36,4 @@ def update_graph():
 
 while True:
     update_graph()
-    sleep(2)
+    sleep(10)
