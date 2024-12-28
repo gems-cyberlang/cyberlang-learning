@@ -20,9 +20,9 @@ parser.add_argument(
     "--config-file", "-c", type=str, default=os.path.join(curr_dir, "config.yaml")
 )
 parser.add_argument(
-    "--output-dir",
+    "--out",
     type=str,
-    help="ouput directory",
+    help=".db file to output to (default data.db)",
     required=False,
 )
 parser.add_argument(
@@ -36,12 +36,6 @@ parser.add_argument(
     "--verbose", "-v", action="store_true", help="will print all logging to screen"
 )
 parser.add_argument("--silent", action="store_true", help="will log only errors")
-parser.add_argument(
-    "--overwrite",
-    "-o",
-    action="store_true",
-    help="if exsting files should be overwritten",
-)
 parser.add_argument(
     "--praw-log",
     "-P",
@@ -88,30 +82,20 @@ elif args.praw_log == "error":
 else:
     praw_log_level = logging.CRITICAL
 
-if args.output_dir is None:
-    output_dir = os.path.join(curr_dir, f"out")
-else:
-    output_dir = args.output_dir
-
-runner = gems_runner(
+with gems_runner(
     config,
     client_id,
     reddit_secret,
-    output_dir=output_dir,
+    db_file=args.out,
     log_level=log_level,
     praw_log_level=praw_log_level,
-)
+) as runner:
 
+    def curr_needed():
+        return sum(bin.needed() for bin in runner.time_ranges)
 
-def curr_needed():
-    return sum(bin.needed() for bin in runner.time_ranges)
-
-
-try:
     total_needed = curr_needed()
     with alive_bar(total=total_needed, manual=True) as pbar:
         while runner.run_step():
             pbar(1 - curr_needed() / total_needed)
     print("Done!")
-finally:
-    runner.close()

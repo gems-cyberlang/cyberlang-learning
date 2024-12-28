@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-import json
 import logging
 import random
 from typing import Optional
@@ -25,12 +24,8 @@ USER_AGENT = "GEMSTONE CYBERLAND RESEARCH"
 REQUEST_PER_CALL = 100
 LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
-LOG_FILE_NAME = "run.log"
-PROGRAM_DATA_FILE_NAME = "program_data.json"
-
-
-def get_formatted_time():
-    return time.strftime("%Y-%m-%d-%H-%M-%S")
+_curr_dir = os.path.dirname(__file__)
+LOG_DIR = os.path.join(_curr_dir, "logs")
 
 
 @dataclass
@@ -58,34 +53,24 @@ class gems_runner:
         config: Config,
         client_id: str,
         reddit_secret: str,
-        output_dir: str,
+        db_file: str,
         log_level: int,
         praw_log_level: int,
     ) -> None:
-        self.output_dir = output_dir
         self.client_id = client_id
         self.reddit_secret = reddit_secret
+        self.db_file = db_file
         self.time_ranges = [
             TimeRangeWithHits(time_range, hits=0, misses=0)
             for time_range in config.time_ranges
         ]
-        self.timestamp = get_formatted_time()
-
-        # Open files and directores loading data from there
-        if not os.path.isdir(output_dir):
-            os.mkdir(output_dir)  # make output directory if it dose not exits
-
-        curr_run = self.curr_run_num()
-
-        self.run_dir = os.path.join(output_dir, f"run_{curr_run}")
-        """Where all the data for this run goes"""
-        os.mkdir(self.run_dir)
 
         # Start logging
         self.logger = self._init_logging("gems_runner", log_level, praw_log_level)
         self.logger.info("Logging started")
 
-        self.db_conn = util.create_db_conn()
+    def __enter__(self):
+        self.db_conn = util.create_db_conn(self.db_file)
         cur = self.db_conn.cursor()
         cur.execute(f"CREATE TABLE IF NOT EXISTS comments({','.join(COMMENT_COLS)})")
         cur.execute(f"CREATE TABLE IF NOT EXISTS misses(id)")
@@ -105,17 +90,10 @@ class gems_runner:
 
         self.logger.info("init complete")
 
-    def curr_run_num(self):
-        """Get the current run number."""
+        return self
 
-        prev_runs = util.get_runs()
-        prev_run_nums = sorted(list(prev_runs.keys()))
-        if len(prev_run_nums) == 0:
-            # This is the first run
-            return 0
-        else:
-            assert len(prev_run_nums) == max(prev_run_nums) + 1, "Missing run detected"
-            return len(prev_run_nums)
+    def __exit__(self, type, value, traceback):
+        self.db_conn.close()
 
     def update_time_ranges(self):
         """Get the number of hits and misses from previous runs in each time period"""
@@ -130,7 +108,6 @@ class gems_runner:
         for bin in self.time_ranges:
             bin.hits = get_count(COMMENTS_TABLE, bin.time_range)
             bin.misses = get_count(MISSES_TABLE, bin.time_range)
-            print(f"hits: {bin.hits}, misses: {bin.misses}")
 
         self.logger.debug("Updated time ranges")
 
@@ -154,7 +131,7 @@ class gems_runner:
         log_level: int,
         praw_log_level: int,
     ) -> logging.Logger:
-        """Initailize logging for whole system
+        """Initialize logging for whole system
 
         Args:
             logger_name (str): Will be printed in logs
@@ -164,11 +141,12 @@ class gems_runner:
         Returns:
             logging.Logger: new logger
         """
-        # Set up logging file
-        # Global Log config
+        if not os.path.isdir(LOG_DIR):
+            os.mkdir(LOG_DIR)
+        # Global log config
         logging.basicConfig(
             level=logging.DEBUG,
-            filename=os.path.join(self.run_dir, LOG_FILE_NAME),
+            filename=os.path.join(LOG_DIR, time.strftime("%Y-%m-%d-%H-%M-%S") + ".log"),
             format=LOG_FORMAT,
         )
 
@@ -315,22 +293,3 @@ class gems_runner:
         )
         self.request_batch(next_ids)
         return True
-
-    def close(self):
-        """Closes all open files."""
-        self.db_conn.close()
-
-        program_data = {
-            "timestamp": self.timestamp,
-            "time_ranges": {
-                str(time_range.time_range.start_date): {
-                    "hits": time_range.hits,
-                    "misses": time_range.misses,
-                }
-                for time_range in self.time_ranges
-            },
-        }
-        with open(
-            os.path.join(self.run_dir, PROGRAM_DATA_FILE_NAME), "w"
-        ) as program_data_f:
-            json.dump(program_data, program_data_f, indent=2)

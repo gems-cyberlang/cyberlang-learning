@@ -15,12 +15,7 @@ from config import TimeRange
 
 _curr_dir = os.path.dirname(__file__)
 
-out_dir = os.path.join(_curr_dir, "out")
-"""The directory in which all the runs are"""
-
-
-SQLITE_DB_FILE = os.path.join(out_dir, "data.db")
-SQLITE_URI = f"sqlite:///{SQLITE_DB_FILE}"
+SQLITE_DB_FILE = os.path.join(_curr_dir, "data.db")
 COMMENTS_TABLE = "comments"
 MISSES_TABLE = "misses"
 
@@ -33,18 +28,12 @@ def to_b36(id: int) -> str:
     return np.base_repr(id, 36).lower()
 
 
-def get_runs() -> dict[int, str]:
-    """Get the path to each run, mapped from the run number"""
-
-    return {
-        int(run_dir.split("_", maxsplit=1)[1]): os.path.join(out_dir, run_dir)
-        for run_dir in glob("run_*", root_dir=out_dir)
-    }
-
-
-def create_db_conn() -> sqlite3.Connection:
+def create_db_conn(db_file: Optional[str] = None) -> sqlite3.Connection:
+    """Connect to the given database (data.db if not given)"""
     # TODO Create a connection to a Postgres database instead
-    return sqlite3.connect(SQLITE_DB_FILE)
+    if not db_file:
+        db_file = SQLITE_DB_FILE
+    return sqlite3.connect(db_file)
 
 
 def load_data() -> tuple[pd.DataFrame, pd.Series]:
