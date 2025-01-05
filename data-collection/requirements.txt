@@ -1,9 +1,16 @@
+# Data collector only
 alive-progress==3.2.0 # Progress bar for data collector
-gensim==4.3.3
+streamlit==1.41.1 # For web dashboard
+
+bs4==0.0.2 # For getting plaintext from rendered HTML
+umarkdown==1.6 # For rendering Markdown as HTML
+
+gensim==4.3.3 # For Word2vec
+ipykernel==6.29.5 # For using Jupyter notebooks
 numpy==1.26.4
 pandas==2.2.3
+polars==1.19.0
 praw==7.8.1
 python-dotenv==1.0.1 # For reading .env files
-PyYAML==6.0.2
+PyYAML==6.0.2 # For loading the data collector config
 seaborn==0.13.2 # For drawing pretty graphs (built on top of Matplotlib)
-streamlit==1.41.1 # For web dashboard
