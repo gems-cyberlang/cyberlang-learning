@@ -1,0 +1,9 @@
+alive-progress==3.2.0 # Progress bar for data collector
+gensim==4.3.3
+numpy==1.26.4
+pandas==2.2.3
+praw==7.8.1
+python-dotenv==1.0.1 # For reading .env files
+PyYAML==6.0.2
+seaborn==0.13.2 # For drawing pretty graphs (built on top of Matplotlib)
+streamlit==1.41.1 # For web dashboard
