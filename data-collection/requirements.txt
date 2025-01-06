@@ -1,10 +1,3 @@
-# Data collector only
-alive-progress==3.2.0 # Progress bar for data collector
-streamlit==1.41.1 # For web dashboard
-
-bs4==0.0.2 # For getting plaintext from rendered HTML
-umarkdown==1.6 # For rendering Markdown as HTML
-
 gensim==4.3.3 # For Word2vec
 ipykernel==6.29.5 # For using Jupyter notebooks
 numpy==1.26.4
@@ -14,3 +7,16 @@ praw==7.8.1
 python-dotenv==1.0.1 # For reading .env files
 PyYAML==6.0.2 # For loading the data collector config
 seaborn==0.13.2 # For drawing pretty graphs (built on top of Matplotlib)
+
+# Data collector only
+alive-progress==3.2.0 # Progress bar for data collector
+streamlit==1.41.1 # For web dashboard
+
+# Contextual embeddings only
+transformers==4.47.1 # Huggingface's package for downloading pre-trained models
+
+# Preprocessing comments only
+bs4==0.0.2 # For getting plaintext from rendered HTML
+umarkdown==1.6 # For rendering Markdown as HTML
+
+spacy==3.8.3 # For tokenization
