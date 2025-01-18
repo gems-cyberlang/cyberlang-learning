@@ -1,5 +1,6 @@
 gensim==4.3.3 # For Word2vec
 ipykernel==6.29.5 # For using Jupyter notebooks
+ipywidgets==8.1.5 # Widgets in Jupyter notebooks
 numpy==1.26.4
 pandas==2.2.3
 polars==1.19.0
@@ -14,9 +15,15 @@ streamlit==1.41.1 # For web dashboard
 
 # Contextual embeddings only
 transformers==4.47.1 # Huggingface's package for downloading pre-trained models
+--index-url https://download.pytorch.org/whl/cu118
+torch==2.5.1+cu118
+# torchaudio==2.5.1+cu118 # Not sure if this is necessary
+# torchvision==0.20.1+cu118 # Not sure if this is necessary
 
 # Preprocessing comments only
 bs4==0.0.2 # For getting plaintext from rendered HTML
 umarkdown==1.6 # For rendering Markdown as HTML
 
 spacy==3.8.3 # For tokenization
+
+scikit-learn==1.6.1 # For clustering
