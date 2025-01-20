@@ -19,8 +19,14 @@ SQLITE_DB_FILE = os.path.join(_curr_dir, "data.db")
 COMMENTS_TABLE = "comments"
 MISSES_TABLE = "misses"
 
-AUTOMOD_ID = int("6l4z3", 36)
-"""ID of automod user as integer"""
+KNOWN_BOTS = [
+    int(id, 36)
+    for id in [
+        "6l4z3",  # Automod bot
+        "enhq4",  # Autowikibot
+    ]
+]
+"""Integer IDs of bots to ignore"""
 
 
 def to_b36(id: int) -> str:
