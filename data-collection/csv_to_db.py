@@ -18,7 +18,7 @@ for run_dir in glob("run_*", root_dir=out_dir):
     comments = pd.read_csv(os.path.join(run_dir, "comments.csv"))
     comments[ID] = comments[ID].map(lambda id: int(id, 36))
     comments[AUTHOR_ID] = comments[AUTHOR_ID].map(
-        lambda id: int(id, 36) if isinstance(id, str) else id
+        lambda id: int(id, 36) if isinstance(id, str) else 0
     )
     comments = comments.rename(columns={"parent_fullname": PARENT_ID})
     comments[PARENT_ID] = comments[PARENT_ID].map(
