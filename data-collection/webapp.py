@@ -1,26 +1,8 @@
-import argparse
-from io import StringIO
-import logging
-import pandas as pd
-import selectors
-import socket
+from time import sleep
 import streamlit as st
 
-logger = logging.Logger("dashboard")
-
-parser = argparse.ArgumentParser(
-    description="Web dashboard for data collector"
-)
-parser.add_argument(
-    "--port",
-    "-p",
-    help="Port that the server runs on",
-    default=1234,
-    type=int,
-)
-args = parser.parse_args()
-
-sel = selectors.DefaultSelector()
+from config import Config
+import util
 
 st.set_page_config(page_title="Data collector dashboard", layout="wide")
 
@@ -31,36 +13,27 @@ hits_graph = col1_elems.empty()
 misses_graph = col1_elems.empty()
 
 col2_elems = col2.container()
+percent_graph = col2_elems.empty()
 hit_rate_graph = col2_elems.empty()
 
-def read(conn: socket.socket):
-    data = conn.recv(1024)
-    if not data:
-        logger.error(f"Closing {conn} (reason: got empty message)")
-        sel.unregister(conn)
-        conn.close()
-        logger.info("Done")
-        exit()
-
-    logger.debug(f"Got {data!r}")
-    draw_graph(data.decode())
+cfg = Config.load()
 
 
-def draw_graph(csv: str):
-    df = pd.read_csv(StringIO(csv))
-    df["Hit rate"] = df["Hits"] / (df["Hits"] + df["Misses"])
-    hits_graph.bar_chart(df, x="Date", y="Hits")
-    misses_graph.bar_chart(df, x="Date", y="Misses")
+def update_graph():
+    comments, misses = util.load_data()
+    df = util.time_range_stats(comments, misses, cfg.time_ranges)
+
+    df["total"] = df["end_id"] - df["start_id"]
+    df["Hit rate"] = df["hits"] / (df["hits"] + df["misses"])
+    df["Percent"] = df["hits"] / df["total"]
+
+    df = df.rename(columns={"start_date": "Date"})
+    hits_graph.bar_chart(df, x="Date", y="hits")
+    misses_graph.bar_chart(df, x="Date", y="misses")
+    percent_graph.bar_chart(df, x="Date", y="Percent")
     hit_rate_graph.bar_chart(df, x="Date", y="Hit rate")
 
 
-client_sock = socket.socket()
-client_sock.connect(("", args.port))
-client_sock.setblocking(False)
-sel.register(client_sock, selectors.EVENT_READ, read)
-
 while True:
-    events = sel.select()
-    for key, _mask in events:
-        callback = key.data
-        callback(key.fileobj)
+    update_graph()
+    sleep(10)

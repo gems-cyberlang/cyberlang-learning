@@ -20,9 +20,9 @@ parser.add_argument(
     "--config-file", "-c", type=str, default=os.path.join(curr_dir, "config.yaml")
 )
 parser.add_argument(
-    "--output-dir",
+    "--out",
     type=str,
-    help="ouput directory",
+    help=".db file to output to (default data.db)",
     required=False,
 )
 parser.add_argument(
@@ -37,28 +37,11 @@ parser.add_argument(
 )
 parser.add_argument("--silent", action="store_true", help="will log only errors")
 parser.add_argument(
-    "--overwrite",
-    "-o",
-    action="store_true",
-    help="if exsting files should be overwritten",
-)
-parser.add_argument(
-    "--prev-file",
-    help="Get number of hits and misses from this file instead of looking at previous runs",
-)
-parser.add_argument(
     "--praw-log",
     "-P",
     help="Log level for PRAW output",
     choices=["info", "debug", "warn", "error"],
     default="warn",
-)
-parser.add_argument(
-    "--port",
-    "-p",
-    help="Port for the server to listen on",
-    default=1234,
-    type=int,
 )
 
 args = parser.parse_args()
@@ -99,27 +82,20 @@ elif args.praw_log == "error":
 else:
     praw_log_level = logging.CRITICAL
 
-if args.output_dir is None:
-    output_dir = os.path.join(curr_dir, f"out")
-else:
-    output_dir = args.output_dir
-
-runner = gems_runner(
+with gems_runner(
     config,
     client_id,
     reddit_secret,
-    output_dir=output_dir,
-    prev_file=args.prev_file,
+    db_file=args.out,
     log_level=log_level,
     praw_log_level=praw_log_level,
-    port=args.port,
-)
+) as runner:
 
-try:
-    total_needed = runner.time_ranges.needed
+    def curr_needed():
+        return sum(bin.needed() for bin in runner.time_ranges)
+
+    total_needed = curr_needed()
     with alive_bar(total=total_needed, manual=True) as pbar:
         while runner.run_step():
-            pbar(1 - runner.time_ranges.needed / total_needed)
+            pbar(1 - curr_needed() / total_needed)
     print("Done!")
-finally:
-    runner.close()
