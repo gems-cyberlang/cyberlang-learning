@@ -12,10 +12,9 @@ import time
 from config import Config, TimeRange
 import util
 from util import (
-    AUTHOR_ID,
-    AUTOMOD_ID,
     COMMENT_COLS,
     COMMENTS_TABLE,
+    KNOWN_BOTS,
     MISSES_TABLE,
     ID,
 )
@@ -42,9 +41,9 @@ class TimeRangeWithHits:
         return max(0, self.time_range.min_comments - self.hits)
 
 
-def b36_if_truthy(s: Optional[str]) -> Optional[int]:
-    """Convert from base 36 if the string is non-empty and not None"""
-    return int(s, 36) if s else None
+def b36_if_truthy(s: Optional[str]) -> int:
+    """Convert from base 36 if the string is non-empty and not None, otherwise returns 0"""
+    return int(s, 36) if s else 0
 
 
 class gems_runner:
@@ -197,8 +196,8 @@ class gems_runner:
                 author_id = b36_if_truthy(
                     data.get("author_fullname", "").removeprefix("t2_")
                 )
-                if author_id == AUTOMOD_ID:
-                    self.logger.debug(f"Comment {id_int} is by automod, skipping")
+                if author_id in KNOWN_BOTS:
+                    self.logger.debug(f"Comment {id_int} is by bot, skipping")
                     continue
                 if len(body) == 0:
                     # Consider an empty comment a miss
@@ -222,10 +221,9 @@ class gems_runner:
                     body,
                 ]
                 for col_name, field in zip(COMMENT_COLS, fields):
-                    if col_name != AUTHOR_ID:
-                        assert (
-                            field != "" and field != None
-                        ), f"{col_name} was empty/none in comment {id_int}"
+                    assert (
+                        field != "" and field != None
+                    ), f"{col_name} was empty/none in comment {id_int}"
 
                 self.add_result(id_int, True)
                 # Because we set "id" to be the primary key, inserting duplicate comments
